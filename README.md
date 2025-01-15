@@ -25,8 +25,11 @@ Now, for a given projectile-target system, we can calculate the depths, radii an
 Ca48 = (48, 20)
 neutron = (1,0)
 com_frame_energy = 13.9
-fermi_energy = -2.11
-isoscalar_params, isovector_params, spin_orbit_params, coulomb_params, delta = elm.calculate_parameters(neutron, Ca48, com_frame_energy, fermi_energy, sample)
+fermi_energy = -7.59
+isoscalar_params, isovector_params, spin_orbit_params, coulomb_params, delta = 
+    elm.calculate_parameters(
+        neutron, Ca48, com_frame_energy, fermi_energy, sample
+    )
 ```
 
 Now we can evaluate the different parts of the model at a given radial coordinate $r$:
