@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "elm"
+authors = [
+  {name="Kyle Beyer", email="beykyle@umich.edu"}
+]
+description = "The East Lansing Model."
+readme = "README.md"
+license = { file="LICENSE" }
+requires-python = ">=3.9"
+dynamic = ["dependencies", "version"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools_scm]
+write_to = "src/elm/__version__.py"
