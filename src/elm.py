@@ -9,6 +9,7 @@ from jitr.reactions.potentials import (
     thomas_safe,
     woods_saxon_prime_safe,
     woods_saxon_safe,
+    coulomb_charged_sphere,
 )
 from jitr.utils.constants import MASS_PION, ALPHA, HBARC
 
@@ -20,7 +21,7 @@ class Parameter:
         self.fancy_label = fancy_label
 
 
-elm_params = [
+params = [
     Parameter("V0", np.float64, r"$V_0$ [MeV]"),
     Parameter("W0", np.float64, r"$W_0$ [MeV]"),
     Parameter("Wd0", np.float64, r"$W_{D0}$ [MeV]"),
@@ -42,9 +43,9 @@ elm_params = [
     Parameter("ad0", np.float64, r"$a_{d0}$ [fm]"),
     Parameter("ad1", np.float64, r"$a_{d1}$ [fm]"),
 ]
-elm_params_dtype = [(p.name, p.dtype) for p in elm_params]
-elm_fancy_labels = dict([(p.name, p.fancy_label) for p in elm_params])
-N_PARAMS = len(elm_params)
+params_dtype = [(p.name, p.dtype) for p in params]
+fancy_labels = dict([(p.name, p.fancy_label) for p in params])
+N_PARAMS = len(params)
 
 
 def dump_sample_to_json(fpath: Path, sample: OrderedDict):
@@ -65,13 +66,13 @@ def read_samples_from_json(fpath: Path):
 
 def to_list_of_samples(samples: list):
     return [
-        OrderedDict([(key, entry[key]) for key in elm_params_dtype.names])
+        OrderedDict([(key, entry[key]) for key in params_dtype.names])
         for entry in samples
     ]
 
 
 def to_numpy(samples: list):
-    return np.array([(sample.values()) for sample in samples], dtype=elm_params_dtype)
+    return np.array([(sample.values()) for sample in samples], dtype=params_dtype)
 
 
 def dump_samples_to_numpy(fpath: Path, samples: list):
@@ -82,61 +83,63 @@ def read_samples_from_numpy(fpath: Path):
     return to_list_of_samples(np.load(fpath))
 
 
-def elm_isoscalar(r, V0, W0, Wd0, R0, a0, Rd, ad):
-    r"""isoscalar part of the EL model (without spin-orbit) as a function of radial distance r"""
+def isoscalar(r, V0, W0, Wd0, R0, a0, Rd, ad):
+    r"""isoscalar part as a function of radial distance r"""
     return -(V0 + 1j * W0) * woods_saxon_safe(r, R0, a0) + (
         4j * a0 * Wd0
     ) * woods_saxon_prime_safe(r, Rd, ad)
 
 
-def elm_isovector(r, V1, W1, Wd1, R1, a1, Rd1, ad1):
-    r"""isovector part of the EL model (without spin-orbit) as a function of radial distance r"""
+def isovector(r, V1, W1, Wd1, R1, a1, Rd1, ad1):
+    r"""isovector part (without spin-orbit) as a function of radial distance r"""
     return -(V1 + 1j * W1) * woods_saxon_safe(r, R1, a1) + (
         4j * a1 * Wd1
     ) * woods_saxon_prime_safe(r, Rd1, ad1)
 
 
-def elm_so(r, Vso, R0, a0):
-    r"""ELM spin-orbit term"""
+def spin_orbit(r, Vso, R0, a0):
+    r"""spin-orbit term"""
     return Vso / MASS_PION**2 * thomas_safe(r, R0, a0)
 
 
-def elm_spin_scalar_plus_coulomb(
+def spin_scalar_plus_coulomb(
     r, projectile, alpha, isoscalar_params, isovector_params, coulomb_params
 ):
+    r"""sum of coulomb, isoscalar and isovector terms, without spin orbit"""
     if projectile == (1, 1):
         factor = 1
-        coul = jitr.reactions.potentials.coulomb_charged_sphere(r, *coulomb_params)
+        coul = coulomb_charged_sphere(r, *coulomb_params)
     elif projectile == (1, 0):
         factor = -1
         coul = 0
 
-    nucl = elm_isoscalar(r, *isoscalar_params) + factor * alpha * elm_isovector(
+    nucl = isoscalar(r, *isoscalar_params) + factor * alpha * isovector(
         r, *isovector_params
     )
     return nucl + coul
 
 
-def elm_spin_scalar(
+def spin_scalar(
     r,
     projectile,
     alpha,
     isoscalar_params,
     isovector_params,
 ):
+    r"""sum of isoscalar and isovector terms, without spin orbit"""
 
     # -1 for neutrons +1 for protons
     _, Z = projectile
     factors = [-1, 1]
     factor = factors[Z]
 
-    nucl = elm_isoscalar(r, *isoscalar_params) + factor * alpha * elm_isovector(
+    nucl = isoscalar(r, *isoscalar_params) + factor * alpha * isovector(
         r, *isovector_params
     )
     return nucl
 
 
-def el_model_parameters(
+def calculate_parameters(
     projectile: tuple, target: tuple, E: float, Ef: float, sp: OrderedDict
 ):
     r"""Calculate the parameters in the ELM for a given target isotope
@@ -148,10 +151,10 @@ def el_model_parameters(
         E  (float): Fermi energy for A,Z nucleus
         sp (OrderedDict) : subparameter sample
     Returns:
-        isoscalar_sp (tuple)
-        isovector_sp (tuple)
-        spin_orbit_sp (tuple)
-        Coulomb_sp (tuple)
+        isoscalar_params (tuple)
+        isovector_params (tuple)
+        spin_orbit_params (tuple)
+        Coulomb_params (tuple)
         delta =  (N-Z)/(N+Z)
     """
     # asymmetry for isovector dependence
@@ -170,7 +173,7 @@ def el_model_parameters(
     # energy
     dE = E - Ef
     if projectile == (1, 1):
-        dE -= elm_coulomb_correction(A, Z, RC)
+        dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
     erg_v = 1.0 + sp["alpha"] * dE + sp["beta"] * dE**2
@@ -197,7 +200,7 @@ def el_model_parameters(
     )
 
 
-def elm_coulomb_correction(A, Z, RC):
+def coulomb_correction(A, Z, RC):
     r"""
     Coulomb correction for proton energy
     """
