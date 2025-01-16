@@ -1,5 +1,6 @@
-# elm
-The East Lansing model global optical potential, including both parameter samples and implementation, provided as a git package for version control. This way, the model version is baked in for ease of tracking alterations via new branches, and so parameter samples calibrated using a specific version of the model are tied to that version. Future releases of the model will numbered just like any software package and released here. 
+# East Lansing Model
+The East Lansing model is an uncertainty quantified global optical potential. This repo includes both parameter samples and its python implementation. The intent of providing it as a git package is so that updates or alterations to the model can be tracked with version control, just like any piece of software. This way, one is always aware of exactly which version of the model they are using, modifications can be tracked easily, and sets of parameter samples can be tied to the specific
+version of the model that is used in the calibration that generates them.
 
 Includes convenience functions for reading, writing and manipulating ensembles of parameter samples as `numpy` [structured array](https://numpy.org/doc/stable/user/basics.rec.html) or [`pandas.DataFrame`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html)s.
 
