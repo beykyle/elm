@@ -40,8 +40,6 @@ params = [
     Parameter("r1A", np.float64, r"$r_{1A}$ [fm]"),
     Parameter("a0", np.float64, r"$a_0$ [fm]"),
     Parameter("a1", np.float64, r"$a_1$ [fm]"),
-    Parameter("ad0", np.float64, r"$a_{d0}$ [fm]"),
-    Parameter("ad1", np.float64, r"$a_{d1}$ [fm]"),
 ]
 params_dtype = [(p.name, p.dtype) for p in params]
 fancy_labels = dict([(p.name, p.fancy_label) for p in params])
