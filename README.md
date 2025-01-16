@@ -62,7 +62,7 @@ and so on.
 ```bash
 git clone git@github.com:beykyle/elm.git
 cd elm
-pip install .
+pip install -e .
 ```
 
 Now you can
@@ -70,7 +70,7 @@ Now you can
 import elm
 ```
 
-and use the provided samples and implementation.
+and use the provided samples and implementation. 
 
 ## useage with git submodule
 
