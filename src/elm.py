@@ -49,7 +49,8 @@ N_PARAMS = len(params)
 
 
 def dump_sample_to_json(fpath: Path, sample: OrderedDict):
-    pass
+    with open(fpath, "w") as file:
+        file.write(dumps(dict(sample), indent=4))
 
 
 def dump_samples_to_json(fpath: Path, samples: list):
@@ -57,14 +58,18 @@ def dump_samples_to_json(fpath: Path, samples: list):
 
 
 def read_sample_from_json(fpath: Path):
-    pass
+    try:
+        with open(fpath, "r") as file:
+            return load(file, object_pairs_hook=OrderedDict)
+    except IOError:
+        raise f"Error: failed to open {fpath}"
 
 
 def read_samples_from_json(fpath: Path):
     pass
 
 
-def to_list_of_samples(samples: list):
+def to_list_of_samples(samples: np.ndarray):
     return [
         OrderedDict([(key, entry[key]) for key in params_dtype.names])
         for entry in samples
