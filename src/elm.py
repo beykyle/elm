@@ -5,7 +5,6 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-import jitr
 from jitr.reactions.potentials import (
     thomas_safe,
     woods_saxon_prime_safe,
@@ -90,7 +89,7 @@ def read_samples_from_numpy(fpath: Path):
 
 
 def isoscalar(r, V0, W0, Wd0, R0, a0, Rd, ad):
-    r"""isoscalar part as a function of radial distance r"""
+    r"""isoscalar part (without spin-orbit) as a function of radial distance r"""
     return -(V0 + 1j * W0) * woods_saxon_safe(r, R0, a0) + (
         4j * a0 * Wd0
     ) * woods_saxon_prime_safe(r, Rd, ad)
