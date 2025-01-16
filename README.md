@@ -1,7 +1,9 @@
 # elm
-The East Lansing model global optical potential, parameter samples and implementation, provided as a git package for version control. This way, the model version is baked in, making it easy to track alterations via new branches, and parameter samples calibrated using a specific version of the model are tied to that version. Future releases of the model will numbered just like any software package and released here.
+The East Lansing model global optical potential, including both parameter samples and implementation, provided as a git package for version control. This way, the model version is baked in for ease of tracking alterations via new branches, and so parameter samples calibrated using a specific version of the model are tied to that version. Future releases of the model will numbered just like any software package and released here. 
 
-Feel free to make your own branch or fork of the model to try out your own ideas! 
+Includes convenience functions for reading, writing and manipulating ensembles of parameter samples as `numpy` [structured array](https://numpy.org/doc/stable/user/basics.rec.html) or [`pandas.DataFrame`](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html)s.
+
+Feel free to make your own branch or fork of the model to try out your own ideas! This setup should make it easy to implement and test any uncertainty quantified global optical potential.
 
 ## publication
 
@@ -17,6 +19,18 @@ First, let's read a parameter sample file into memory:
 
 ```python
 sample = elm.read_sample_from_json( "path/to/sample.json" )
+print(sample)
+```
+
+should print the `dict` with parameter names as keys and their values as values, something like:
+
+```
+{ 
+    'V0' : 34.67, 
+    'W0' 12.8, 
+    'Wd0' : 3.2, 
+    ... 
+}
 ```
 
 Now, for a given projectile-target system, we can calculate the depths, radii and things that go into the potential model:
@@ -32,7 +46,7 @@ isoscalar_params, isovector_params, spin_orbit_params, coulomb_params, delta =
     )
 ```
 
-Now we can evaluate the different parts of the model at a given radial coordinate $r$:
+Now we can evaluate the different parts of the model on a radial coordinate grid $r$:
 
 ```python
 r = np.linspace(0.01, 10, 200)
