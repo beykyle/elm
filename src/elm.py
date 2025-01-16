@@ -2,6 +2,7 @@ from collections import OrderedDict
 from json import load, dumps
 from pathlib import Path
 
+import pandas as pd
 import numpy as np
 
 import jitr
@@ -53,10 +54,6 @@ def dump_sample_to_json(fpath: Path, sample: OrderedDict):
         file.write(dumps(dict(sample), indent=4))
 
 
-def dump_samples_to_json(fpath: Path, samples: list):
-    pass
-
-
 def read_sample_from_json(fpath: Path):
     try:
         with open(fpath, "r") as file:
@@ -65,27 +62,31 @@ def read_sample_from_json(fpath: Path):
         raise f"Error: failed to open {fpath}"
 
 
-def read_samples_from_json(fpath: Path):
-    pass
-
-
-def to_list_of_samples(samples: np.ndarray):
+def array_to_list(samples: np.ndarray):
     return [
         OrderedDict([(key, entry[key]) for key in params_dtype.names])
         for entry in samples
     ]
 
 
-def to_numpy(samples: list):
+def list_to_array(samples: list):
     return np.array([(sample.values()) for sample in samples], dtype=params_dtype)
 
 
+def list_to_dataframe(samples: list):
+    return pd.DataFrame(samples)
+
+
+def dataframe_to_list(samples: pd.DataFrame):
+    return samples.to_dict(orient='records', into=OrderedDict)
+
+
 def dump_samples_to_numpy(fpath: Path, samples: list):
-    to_numpy(samples).save(fpath)
+    list_to_array(samples).save(fpath)
 
 
 def read_samples_from_numpy(fpath: Path):
-    return to_list_of_samples(np.load(fpath))
+    return array_to_list(np.load(fpath))
 
 
 def isoscalar(r, V0, W0, Wd0, R0, a0, Rd, ad):
