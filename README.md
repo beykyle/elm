@@ -16,7 +16,7 @@ import elm
 First, let's read a parameter sample file into memory:
 
 ```python
-sample = read_sample_from_json( "path/to/sample.json" )
+sample = elm.read_sample_from_json( "path/to/sample.json" )
 ```
 
 Now, for a given projectile-target system, we can calculate the depths, radii and things that go into the potential model:
