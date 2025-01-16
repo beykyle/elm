@@ -7,7 +7,7 @@ name = "elm"
 authors = [
   {name="Kyle Beyer", email="beyerk@frib.msu.edu"}
 ]
-description = "The East Lansing Model."
+description = "The East Lansing Model"
 readme = "README.md"
 license = { file="LICENSE" }
 requires-python = ">=3.9"
