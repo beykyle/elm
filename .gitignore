@@ -1,5 +1,5 @@
 # version
-./src/__version__.py
+src/__version__.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
