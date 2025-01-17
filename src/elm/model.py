@@ -15,35 +15,34 @@ from jitr.utils.constants import MASS_PION, ALPHA, HBARC
 
 
 class Parameter:
-    def __init__(self, name, dtype, fancy_label):
+    def __init__(self, name, dtype, unit, latex_name):
         self.name = name
         self.dtype = dtype
-        self.fancy_label = fancy_label
+        self.unit = unit
+        self.latex_name = latex_name
 
 
 params = [
-    Parameter("V0", np.float64, r"$V_0$ [MeV]"),
-    Parameter("W0", np.float64, r"$W_0$ [MeV]"),
-    Parameter("Wd0", np.float64, r"$W_{D0}$ [MeV]"),
-    Parameter("V1", np.float64, r"$V_1$ [MeV]"),
-    Parameter("W1", np.float64, r"$W_1$ [MeV]"),
-    Parameter("Wd1", np.float64, r"$W_{D1}$ [MeV]"),
-    Parameter("Vso", np.float64, r"$V_{so}$ [MeV]"),
-    Parameter("alpha", np.float64, r"$\alpha$"),
-    Parameter("beta", np.float64, r"$\beta$"),
-    Parameter("gamma_w", np.float64, r"$\gamma_W$ [MeV]"),
-    Parameter("gamma_d", np.float64, r"$\gamma_D$ [MeV]"),
-    Parameter("eta_d", np.float64, r"$\eta_D$ [MeV]"),
-    Parameter("r0", np.float64, r"$r_0$ [fm]"),
-    Parameter("r1", np.float64, r"$r_1$ [fm]"),
-    Parameter("r0A", np.float64, r"$r_{0A}$ [fm]"),
-    Parameter("r1A", np.float64, r"$r_{1A}$ [fm]"),
-    Parameter("a0", np.float64, r"$a_0$ [fm]"),
-    Parameter("a1", np.float64, r"$a_1$ [fm]"),
+    Parameter("V0", np.float64, r"MeV", r"V_0"),
+    Parameter("W0", np.float64, r"MeV", r"W_0"),
+    Parameter("Wd0", np.float64, r"MeV", r"W_{D0}"),
+    Parameter("V1", np.float64, r"MeV", r"V_1"),
+    Parameter("W1", np.float64, r"MeV", r"W_1"),
+    Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
+ #   Parameter("Vso", np.float64, r"MeV", r"V_{so}"),
+    Parameter("alpha", np.float64, r"MeV$^{-1}$", r"\alpha"),
+ #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
+    Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
+    Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
+    Parameter("r0", np.float64, r"fm", r"r_0"),
+    Parameter("r1", np.float64, r"fm", r"r_1"),
+    Parameter("r0A", np.float64, r"fm", r"r_{0A}"),
+    Parameter("r1A", np.float64, r"fm", r"r_{1A}"),
+    Parameter("a0", np.float64, r"fm", r"a_0"),
+    Parameter("a1", np.float64, r"fm", r"a_1"),
 ]
 params_dtype = [(p.name, p.dtype) for p in params]
-fancy_labels = dict([(p.name, p.fancy_label) for p in params])
-N_PARAMS = len(params)
+NUM_PARAMS = len(params)
 
 
 def dump_sample_to_json(fpath: Path, sample: OrderedDict):
@@ -75,7 +74,7 @@ def list_to_dataframe(samples: list):
 
 
 def dataframe_to_list(samples: pd.DataFrame):
-    return samples.to_dict(orient='records', into=OrderedDict)
+    return samples.to_dict(orient="records", into=OrderedDict)
 
 
 def dump_samples_to_numpy(fpath: Path, samples: list):
@@ -179,15 +178,15 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = 1.0 + sp["alpha"] * dE + sp["beta"] * dE**2
+    erg_v = 1.0 + sp["alpha"] * dE #+ sp["beta"] * dE**2
     erg_w = dE**2 / (dE**2 + sp["gamma_w"] ** 2)
-    erg_wd = dE**2 / (dE**2 + sp["gamma_d"] ** 2) * np.exp(-dE / sp["eta_d"])
+    erg_wd = dE**2 / (dE**2 + sp["gamma_d"] ** 2)
 
     # isoscalar depths
     V0 = sp["V0"] * erg_v
     W0 = sp["W0"] * erg_w
     Wd0 = sp["Wd0"] * erg_wd
-    Vso = sp["Vso"]
+    Vso = 5.58 # sp["Vso"]
 
     # isovector depths
     V1 = sp["V1"] * erg_v
