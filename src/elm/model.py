@@ -29,9 +29,9 @@ params = [
     Parameter("V1", np.float64, r"MeV", r"V_1"),
     Parameter("W1", np.float64, r"MeV", r"W_1"),
     Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
- #   Parameter("Vso", np.float64, r"MeV", r"V_{so}"),
+    #   Parameter("Vso", np.float64, r"MeV", r"V_{so}"),
     Parameter("alpha", np.float64, r"MeV$^{-1}$", r"\alpha"),
- #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
+    #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
     Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
     Parameter("r0", np.float64, r"fm", r"r_0"),
@@ -104,38 +104,34 @@ def spin_orbit(r, Vso, R0, a0):
     return Vso / MASS_PION**2 * thomas_safe(r, R0, a0)
 
 
-def spin_scalar_plus_coulomb(
-    r, projectile, alpha, isoscalar_params, isovector_params, coulomb_params
+def central_plus_coulomb(
+    r, projectile, asym_factor, isoscalar_params, isovector_params, coulomb_params
 ):
     r"""sum of coulomb, isoscalar and isovector terms, without spin orbit"""
     if projectile == (1, 1):
-        factor = 1
         coul = coulomb_charged_sphere(r, *coulomb_params)
     elif projectile == (1, 0):
-        factor = -1
+        asym_factor *= -1
         coul = 0
 
-    nucl = isoscalar(r, *isoscalar_params) + factor * alpha * isovector(
+    nucl = isoscalar(r, *isoscalar_params) + asym_factor * isovector(
         r, *isovector_params
     )
     return nucl + coul
 
 
-def spin_scalar(
+def central(
     r,
     projectile,
-    alpha,
+    asym_factor,
     isoscalar_params,
     isovector_params,
 ):
     r"""sum of isoscalar and isovector terms, without spin orbit"""
+    if projectile == (1, 0):
+        asym_factor *= -1
 
-    # -1 for neutrons +1 for protons
-    _, Z = projectile
-    factors = [-1, 1]
-    factor = factors[Z]
-
-    nucl = isoscalar(r, *isoscalar_params) + factor * alpha * isovector(
+    nucl = isoscalar(r, *isoscalar_params) + asym_factor * isovector(
         r, *isovector_params
     )
     return nucl
@@ -157,11 +153,11 @@ def calculate_parameters(
         isovector_params (tuple)
         spin_orbit_params (tuple)
         Coulomb_params (tuple)
-        delta =  (N-Z)/(N+Z)
+        asym_factor =  (N-Z)/(N+Z)
     """
     # asymmetry for isovector dependence
     A, Z = target
-    delta = (A - 2 * Z) / (A)
+    asym_factor = (A - 2 * Z) / (A)
 
     # geometries
     R0 = sp["r0"] + sp["r0A"] * A ** (1.0 / 3.0)
@@ -178,7 +174,7 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = 1.0 + sp["alpha"] * dE #+ sp["beta"] * dE**2
+    erg_v = 1.0 + sp["alpha"] * dE  # + sp["beta"] * dE**2
     erg_w = dE**2 / (dE**2 + sp["gamma_w"] ** 2)
     erg_wd = dE**2 / (dE**2 + sp["gamma_d"] ** 2)
 
@@ -186,7 +182,7 @@ def calculate_parameters(
     V0 = sp["V0"] * erg_v
     W0 = sp["W0"] * erg_w
     Wd0 = sp["Wd0"] * erg_wd
-    Vso = 5.58 # sp["Vso"]
+    Vso = 5.58  # sp["Vso"]
 
     # isovector depths
     V1 = sp["V1"] * erg_v
@@ -198,7 +194,7 @@ def calculate_parameters(
         (V1, W1, Wd1, R1, a1),
         (Vso, R0, a0),
         (Z, RC),
-        delta,
+        asym_factor,
     )
 
 
