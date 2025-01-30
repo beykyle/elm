@@ -9,7 +9,14 @@ from .model import calculate_parameters, central_plus_coulomb, spin_orbit
 
 
 def set_up_solver(
-    projectile, target, Elab, angles_cal, angles_vis, core_solver, channel_radius, lmax
+    projectile: tuple,
+    target: tuple,
+    Elab: float,
+    angles_cal: np.array,
+    angles_vis: np.array,
+    core_solver: jitr.rmatrix.Solver,
+    channel_radius: float,
+    lmax: int,
 ):
 
     sys = jitr.reactions.ProjectileTargetSystem(
@@ -53,17 +60,35 @@ class DifferentialXS:
         Elab: float,
         exp: exfor_tools.ExforDifferentialDataSet,
         angles_vis: np.array,
+        core_solver: jitr.rmatrix.Solver,
+        channel_radius: float,
+        lmax: int = 20,
+        absolute_xs=True,
     ):
         self.exp = exp
-        # TODO make sure data is scaled by rutherford if proton proj
         self.N = self.exp.data.shape[1]
-
         self.angles_vis = angles_vis
         self.angles_cal = exp.data[0, :]
 
-        calibrator, visualizer = set_up_solver(projectile, target, Elab)
+        calibrator, visualizer = set_up_solver(
+            projectile,
+            target,
+            Elab,
+            self.angles_cal,
+            self.angles_vis,
+            core_solver,
+            channel_radius,
+            lmax,
+        )
         self.calibration_model = calibrator
         self.visualization_model = visualizer
+        self.target = self.calibration_model.target
+        self.projectile = self.calibration_model.projectile
+        self.Elab = self.exp.Elab
+
+        if absolute_xs and self.projectile[1] > 0:
+            self.exp.data[2, :] /= self.calibration_model.rutherford
+            self.exp.data[3, :] /= self.calibration_model.rutherford
 
         if projectile == (1, 1):
             self.Ef = jitr.utils.kinematics.proton_fermi_energy(*target)
