@@ -1,6 +1,9 @@
 # version
 src/__version__.py
 
+# full workspaces files -- too big
+./data/workspaces/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
