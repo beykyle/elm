@@ -2,7 +2,7 @@
 src/__version__.py
 
 # full workspaces files -- too big
-./data/workspaces/*
+data/workspaces/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
