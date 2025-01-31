@@ -68,7 +68,7 @@ class DifferentialXS:
         self.exp = exp
         self.N = self.exp.data.shape[1]
         self.angles_vis = angles_vis
-        self.angles_cal = exp.data[0, :]
+        self.angles_cal = exp.data[0, :] * np.pi / 180
 
         calibrator, visualizer = set_up_solver(
             projectile,
