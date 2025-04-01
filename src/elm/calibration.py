@@ -7,6 +7,8 @@ import jitr
 
 from .model import calculate_parameters, central_plus_coulomb, spin_orbit
 
+# TODO for each energy, allow for multiple DifferentialWorkspaces. Always have one for vis, and then one for
+# each measurement at that energy. Add Observable or Measurement class, one for each measurement.
 
 def set_up_solver(
     projectile: tuple,
