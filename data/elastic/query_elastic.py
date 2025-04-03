@@ -2,9 +2,14 @@ import exfor_tools
 
 # settings consistent across data set
 energy_range = [10, 200]
+min_num_pts = 4
 
 
-def reattempt_parse(failed_parse, parsing_kwargs):
+def reattempt_parse(
+    failed_parse,
+    parsing_kwargs,
+    filter_kwargs={"filter_lab_angle": True, "min_num_pts": min_num_pts},
+):
     return exfor_tools.ExforEntryAngularDistribution(
         entry=failed_parse.entry,
         target=failed_parse.target,
@@ -12,7 +17,8 @@ def reattempt_parse(failed_parse, parsing_kwargs):
         quantity=failed_parse.quantity,
         Einc_range=energy_range,
         vocal=True,
-        parsing_kwargs=parsing_kwargs
+        parsing_kwargs=parsing_kwargs,
+        filter_kwargs=filter_kwargs,
     )
 
 
@@ -32,7 +38,7 @@ def query_elastic_data(target):
         quantity="dXS/dA",
         Einc_range=energy_range,
         vocal=True,
-        filter_subentries=exfor_tools.filter_out_lab_angle,
+        filter_kwargs={"filter_lab_angle": True, "min_num_pts": min_num_pts},
     )
     print("\n========================================================")
     print(f"Succesfully parsed {len(entries_pp.keys())} entries for (p,p)")
@@ -48,7 +54,7 @@ def query_elastic_data(target):
         quantity="dXS/dRuth",
         Einc_range=energy_range,
         vocal=True,
-        filter_subentries=exfor_tools.filter_out_lab_angle,
+        filter_kwargs={"filter_lab_angle": True, "min_num_pts": min_num_pts},
     )
     print("\n========================================================")
     print(f"Succesfully parsed {len(entries_ppr.keys())} entries for (p,p) ratio")
@@ -64,7 +70,7 @@ def query_elastic_data(target):
         quantity="dXS/dA",
         Einc_range=energy_range,
         vocal=True,
-        filter_subentries=exfor_tools.filter_out_lab_angle,
+        filter_kwargs={"filter_lab_angle": True, "min_num_pts": min_num_pts},
     )
     print("\n========================================================")
     print(f"Succesfully parsed {len(entries_nn.keys())} entries for (n,n)")
