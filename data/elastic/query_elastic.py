@@ -25,7 +25,7 @@ def reattempt_parse(
 def print_failed_parses(failed_parses):
     for k, v in failed_parses.items():
         print(f"Entry: {k}")
-        print(v.failed_parses[k][1])
+        print(v.failed_parses[k][0], " : ", v.failed_parses[k][1])
 
 
 def query_elastic_data(target):
