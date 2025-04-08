@@ -60,7 +60,7 @@ class DifferentialXS:
         projectile: tuple,
         target: tuple,
         Elab: float,
-        exp: exfor_tools.ExforDifferentialDataSet,
+        exp: exfor_tools.AngularDistributionSysStatErr,
         angles_vis: np.array,
         core_solver: jitr.rmatrix.Solver,
         channel_radius: float,
