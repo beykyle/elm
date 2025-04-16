@@ -1,81 +1,102 @@
 from collections import OrderedDict
-import pickle
-from pathlib import Path
 import numpy as np
 import exfor_tools
 import jitr
 
 from .model import calculate_parameters, central_plus_coulomb, spin_orbit
 
-# TODO for each energy, allow for multiple DifferentialWorkspaces. Always have one for vis, and then one for
-# each measurement at that energy. Add Observable or Measurement class, one for each measurement.
 
-def set_up_solver(
-    projectile: tuple,
-    target: tuple,
-    Elab: float,
-    angles_cal: np.array,
-    angles_vis: np.array,
-    core_solver: jitr.rmatrix.Solver,
-    channel_radius: float,
-    lmax: int,
-):
+class Constraint:
+    """Represents an experimental constraint y, with a covariance matrix,
+    and some model for y, f, that takes in some params"""
 
-    sys = jitr.reactions.ProjectileTargetSystem(
-        channel_radius=channel_radius,
-        lmax=lmax,
-        mass_target=jitr.utils.kinematics.mass(*target),
-        mass_projectile=jitr.utils.kinematics.mass(*projectile),
-        Ztarget=target[1],
-        Zproj=projectile[1],
-        coupling=jitr.reactions.system.spin_half_orbit_coupling,
-    )
+    def __init__(self, n_params: int, y: np.ndarray, covariance: np.ndarray):
+        self.n_params = n_params
+        self.y = y
+        if len(self.y.shape) > 1:
+            raise ValueError(f"data must be 1D; y was {len(self.y.shape)}D")
+        self.n_data_pts = y.shape[0]
+        if covariance.shape == (self.n_data_pts,):
+            self.covariance = np.diag(covariance)
+        elif covariance.shape == (self.n_data_pts, self.n_data_pts):
+            self.covariance = covariance
+        else:
+            raise ValueError(
+                f"Incompatible covariance matrix shape "
+                f"{covariance.shape} for Constraint with "
+                f"{self.n_data_pts} data points"
+            )
+        self.cov_inv = np.linalg.inv(self.covariance)
 
-    # get kinematics and parameters for this experiment
-    kinematics = jitr.utils.kinematics.semi_relativistic_kinematics(
-        sys.mass_target, sys.mass_projectile, Elab, sys.Zproj * sys.Ztarget
-    )
+    def f(self, params):
+        pass
 
-    integral_ws = jitr.xs.elastic.IntegralWorkspace(
-        projectile=projectile,
-        target=target,
-        sys=sys,
-        kinematics=kinematics,
-        solver=core_solver,
-    )
+    def residual(self, params):
+        return self.y - self.f(params)
 
-    calibrator = jitr.xs.elastic.DifferentialWorkspace(
-        integral_workspace=integral_ws, angles=angles_cal
-    )
-    visualizer = jitr.xs.elastic.DifferentialWorkspace(
-        integral_workspace=integral_ws, angles=angles_vis
-    )
-
-    return calibrator, visualizer
+    def chi2(self, params):
+        delta = self.residual(params)
+        return delta.T @ self.cov_inv @ delta
 
 
-class DifferentialXS:
+class ChExIASConstraint(Constraint):
+    pass  # TODO
+
+
+class DifferentialElasticConstraint(Constraint):
     def __init__(
         self,
-        projectile: tuple,
-        target: tuple,
-        Elab: float,
-        exp: exfor_tools.AngularDistributionSysStatErr,
+        n_params: int,
+        reaction: exfor_tools.Reaction,
+        quantity: str,
+        measurement: exfor_tools.AngularDistributionSysStatErr,
         angles_vis: np.array,
         core_solver: jitr.rmatrix.Solver,
         channel_radius: float,
         lmax: int = 20,
         absolute_xs=True,
     ):
-        self.exp = exp
-        self.N = self.exp.data.shape[1]
-        self.angles_vis = angles_vis
-        self.angles_cal = exp.data[0, :] * np.pi / 180
+        self.reaction = reaction
+        self.quantity = quantity
+        self.measurement = measurement
+
+        if self.measurement.y_units == "barns/ster":
+            self.measurement.y /= 1000
+            self.measurement.statistical_err /= 1000
+            self.measurement.systematic_offset_err /= 1000
+            self.measurement.y_units = "mb/Sr"
+            assert self.quantity == "dXS/dA"
+        elif self.measurement.y_units == "mb/Sr":
+            assert self.quantity == "dXS/dA"
+        elif self.measurement.y_units == "no-dim":
+            assert self.quantity == "Ay" or self.quantity == "dXS/dRuth"
+        else:
+            raise ValueError(f"invalid y units {self.measurement.y_units}")
+
+        self.x_vis = angles_vis
+        self.x_cal = self.measurement.x * np.pi / 180
+        if self.measurement.x_units != "degrees":
+            raise ValueError(f"invalid x units {self.measurement.x_units}")
+
+        covariance = np.diag(self.measurement.statistical_err**2)
+        if self.measurement.systematic_norm_err > 0:
+            covariance += (
+                np.outer(self.measurement.y, self.measurement.y)
+                * self.measurement.systematic_norm_err**2
+            )
+        if self.measurement.systematic_offset_err > 0:
+            raise NotImplementedError(
+                "Systematic offset error covariance not implemented"
+            )
+        if self.measurement.general_systematic_err > 0:
+            raise NotImplementedError(
+                "Nonuniform systematic error covariance not implemented"
+            )
+        super().__init__(self.n_params, self.measurement.y, covariance)
 
         calibrator, visualizer = set_up_solver(
-            projectile,
-            target,
-            Elab,
+            self.reaction,
+            self.measurement.Einc,
             self.angles_cal,
             self.angles_vis,
             core_solver,
@@ -84,24 +105,40 @@ class DifferentialXS:
         )
         self.calibration_model = calibrator
         self.visualization_model = visualizer
-        self.target = self.calibration_model.target
-        self.projectile = self.calibration_model.projectile
-        self.Elab = self.exp.Elab
+
+        self.Elab = self.calibration_model.Elab
+        self.mu = self.calibration_model.mu
+        self.Ecm = self.calibration_model.Ecm
+        self.k = self.calibration_model.k
+        self.eta = self.calibration_model.eta
 
         if absolute_xs and self.projectile[1] > 0:
             self.exp.data[2, :] /= self.calibration_model.rutherford
             self.exp.data[3, :] /= self.calibration_model.rutherford
 
-        if projectile == (1, 1):
-            self.Ef = jitr.utils.kinematics.proton_fermi_energy(*target)
-            self.get_y = self.get_diff_xs_ratio_to_ruth
-        elif projectile == (1, 0):
-            self.Ef = jitr.utils.kinematics.neutron_fermi_energy(*target)
-            self.get_y = self.get_diff_xs
+        if self.quantity == "dXS/dA":
+            self.f = self.get_diff_xs
+            self.f_vis = self.get_diff_xs_vis
+        elif self.quantity == "dXS/dRuth":
+            if self.reaction.projectile[1] == 0:
+                raise ValueError("Can't do dXS/dRuth for uncharged projectile")
+            self.f = self.get_diff_xs_ratio_to_ruth
+            self.f_vis = self.get_diff_xs_ratio_to_ruth_vis
+        elif self.quantity == "Ay":
+            self.f = self.get_Ay
+            self.f_vis = self.get_Ay_vis
+        else:
+            raise NotImplementedError(f"{self.quantity} not supported")
+
+        if self.reaction.projectile == (1, 1):
+            self.Ef = jitr.utils.kinematics.proton_fermi_energy(*self.reaction.target)
+        elif self.reaction.projectile == (1, 0):
+            self.Ef = jitr.utils.kinematics.neutron_fermi_energy(*self.reaction.target)
         else:
             raise NotImplementedError("Only neutron and proton projectiles are valid")
 
     def params(self, sub_params: OrderedDict):
+        # TODO allow for arbitrary mapping from params to xs, so e.g. KDUQ and WLH can be used
         return calculate_parameters(
             self.calibration_model.projectile,
             self.calibration_model.target,
@@ -110,7 +147,11 @@ class DifferentialXS:
             sub_params,
         )
 
-    def xs(self, sub_params: OrderedDict, model: jitr.xs.elastic.DifferentialWorkspace):
+    def xs(
+        self,
+        sub_params: OrderedDict,
+        model: jitr.xs.elastic.DifferentialWorkspace,
+    ):
         (
             isoscalar_params,
             isovector_params,
@@ -118,6 +159,7 @@ class DifferentialXS:
             coul_params,
             asym_factor,
         ) = self.params(sub_params)
+
         return model.xs(
             interaction_central=central_plus_coulomb,
             interaction_spin_orbit=spin_orbit,
@@ -131,32 +173,81 @@ class DifferentialXS:
             args_spin_orbit=spin_orbit_params,
         )
 
-    def xs_model(self, sub_params: OrderedDict):
+    def xs_cal(self, sub_params: OrderedDict):
         return self.xs(sub_params, self.calibration_model)
 
     def xs_vis(self, sub_params: OrderedDict):
         return self.xs(sub_params, self.visualization_model)
 
-    def get_diff_xs(self, xs: jitr.xs.elastic.ElasticXS):
+    def get_Ay(self, sub_params: OrderedDict):
+        xs = self.xs_cal(sub_params)
+        return xs.Ay
+
+    def get_Ay_vis(self, sub_params: OrderedDict):
+        xs = self.xs_vis(sub_params)
+        return xs.Ay
+
+    def get_diff_xs(self, sub_params: OrderedDict):
+        xs = self.xs_cal(sub_params)
         return xs.dsdo
 
-    def get_diff_xs_ratio_to_ruth(self, xs: jitr.xs.elastic.ElasticXS):
-        return xs.dsdo / xs.rutherford
-
-    def y_model(self, sub_params: OrderedDict):
-        xs = self.xs_model(sub_params)
-        return self.get_y(xs)
-
-    def y_vis(self, sub_params: OrderedDict):
+    def get_diff_xs_vis(self, sub_params: OrderedDict):
         xs = self.xs_vis(sub_params)
-        return self.get_y(xs)
+        return xs.dsdo
 
-    def residual(self, sub_params: OrderedDict):
-        y_model = self.y_model(sub_params)
-        y_exp = self.exp.data[2, :]
-        return y_model - y_exp
+    def get_diff_xs_ratio_to_ruth(self, sub_params: OrderedDict):
+        xs = self.xs_cal(sub_params)
+        return xs.dsdo / self.calibration_model.rutherford
 
-    def sigma_y(
-        self,
-    ):
-        return self.exp.data[3, :]
+    def get_diff_xs_ratio_to_ruth_vis(self, sub_params: OrderedDict):
+        xs = self.xs_vis(sub_params)
+        return xs.dsdo / self.visualization_model.rutherford
+
+
+def set_up_solver(
+    reaction: exfor_tools.Reaction,
+    Elab: float,
+    angles_cal: np.array,
+    angles_vis: np.array,
+    core_solver: jitr.rmatrix.Solver,
+    lmax: int,
+):
+
+    mass_target = jitr.utils.kinematics.mass(*reaction.target)
+    mass_projectile = jitr.utils.kinematics.mass(*reaction.projectile)
+
+    Zproj = reaction.projectile[1]
+    Ztarget = reaction.target[1]
+
+    # get kinematics and parameters for this experiment
+    kinematics = jitr.utils.kinematics.semi_relativistic_kinematics(
+        mass_target, mass_projectile, Elab, Zproj * Ztarget
+    )
+    channel_radius_fm = jitr.utils.interaction_range(reaction.projectile[0])
+    a = channel_radius_fm * kinematics.k + 2 * np.pi
+    sys = jitr.reactions.ProjectileTargetSystem(
+        channel_radius=a,
+        lmax=lmax,
+        mass_target=mass_target,
+        mass_projectile=mass_projectile,
+        Ztarget=Ztarget,
+        Zproj=Zproj,
+        coupling=jitr.reactions.system.spin_half_orbit_coupling,
+    )
+
+    integral_ws = jitr.xs.elastic.IntegralWorkspace(
+        projectile=reaction.projectile,
+        target=reaction.target,
+        sys=sys,
+        kinematics=kinematics,
+        solver=core_solver,
+    )
+
+    calibrator = jitr.xs.elastic.DifferentialWorkspace(
+        integral_workspace=integral_ws, angles=angles_cal
+    )
+    visualizer = jitr.xs.elastic.DifferentialWorkspace(
+        integral_workspace=integral_ws, angles=angles_vis
+    )
+
+    return calibrator, visualizer
