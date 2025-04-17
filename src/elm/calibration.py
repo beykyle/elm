@@ -9,8 +9,19 @@ from .model import calculate_parameters, central_plus_coulomb, spin_orbit
 
 
 class Constraint:
-    """Represents an experimental constraint y, with a covariance matrix,
-    and some model for y, f, that takes in some params"""
+    """
+    Represents an experimental constraint y, with a covariance matrix,
+    and some model for y, f, that takes in some params.
+
+    Parameters
+    ----------
+    n_params : int
+        Number of parameters.
+    y : np.ndarray
+        Experimental data.
+    covariance : np.ndarray
+        Covariance matrix.
+    """
 
     def __init__(self, n_params: int, y: np.ndarray, covariance: np.ndarray):
         self.n_params = n_params
@@ -31,21 +42,95 @@ class Constraint:
         self.cov_inv = np.linalg.inv(self.covariance)
 
     def f(self, params):
+        """
+        Model function for y.
+
+        Parameters
+        ----------
+        params : array-like
+            Parameters for the model.
+        """
         pass
 
     def residual(self, params):
+        """
+        Calculate the residuals.
+
+        Parameters
+        ----------
+        params : array-like
+            Parameters for the model.
+
+        Returns
+        -------
+        np.ndarray
+            Residuals.
+        """
         return self.y - self.f(params)
 
     def chi2(self, params):
+        """
+        Calculate the chi-squared statistic.
+
+        Parameters
+        ----------
+        params : array-like
+            Parameters for the model.
+
+        Returns
+        -------
+        float
+            Chi-squared statistic.
+        """
         delta = self.residual(params)
         return delta.T @ self.cov_inv @ delta
 
 
 class ChExIASConstraint(Constraint):
+    """
+    Placeholder for ChExIASConstraint.
+    """
     pass  # TODO
 
 
 class DifferentialElasticConstraint(Constraint):
+    """
+    Represents a differential elastic constraint.
+
+    Parameters
+    ----------
+    n_params : int
+        Number of parameters.
+    model : callable
+        Model function which takes in three arguments:
+            constraint: DifferentialElasticConstraint
+                `self` of the DifferentialElasticConstraint object initialized
+                by this function
+            sub_params: OrderedDict
+                the parameters to pass to the ELM
+            model: jitr.xs.elastic.DifferentialWorkspace
+                the workspace used to calculate the cross section, typically
+                will be either self.workspace_cal or self.workspace_vis
+        Returns:
+            xs : jitr.xs.elastic.ElasticXS
+    reaction : exfor_tools.Reaction
+        Reaction information.
+    quantity : str
+        Quantity type.
+    measurement : exfor_tools.AngularDistributionSysStatErr
+        Measurement data.
+    angles_vis : np.array
+        Visualization angles.
+    core_solver : jitr.rmatrix.Solver
+        Core solver.
+    channel_radius : float
+        Channel radius.
+    lmax : int, optional
+        Maximum angular momentum, by default 20.
+    absolute_xs : bool, optional
+        Absolute cross-section flag, by default True.
+    """
+
     def __init__(
         self,
         n_params: int,
@@ -142,28 +227,132 @@ class DifferentialElasticConstraint(Constraint):
             raise NotImplementedError("Only neutron and proton projectiles are valid")
 
     def xs_cal(self, sub_params):
+        """
+        Calculate cross-section for calibration.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Cross-section result.
+        """
         return self.model(self, sub_params, self.calibration_workspace)
 
     def xs_vis(self, sub_params):
+        """
+        Calculate cross-section for visualization.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Cross-section result.
+        """
         return self.model(self, sub_params, self.visualization_workspace)
 
     def get_Ay(self, sub_params):
+        """
+        Get analyzing power Ay.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Analyzing power Ay.
+        """
         return self.xs_cal(sub_params).Ay
 
     def get_Ay_vis(self, sub_params):
+        """
+        Get analyzing power Ay for visualization.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Analyzing power Ay.
+        """
         return self.xs_vis(sub_params).Ay
 
     def get_diff_xs(self, sub_params):
+        """
+        Get differential cross-section.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Differential cross-section.
+        """
         return self.xs_cal(sub_params).dsdo
 
     def get_diff_xs_vis(self, sub_params):
+        """
+        Get differential cross-section for visualization.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Differential cross-section.
+        """
         return self.xs_vis(sub_params).dsdo
 
     def get_diff_xs_ratio_to_ruth(self, sub_params):
+        """
+        Get differential cross-section ratio to Rutherford.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Differential cross-section ratio.
+        """
         xs = self.xs_cal(sub_params)
         return xs.dsdo / self.calibration_workspace.rutherford
 
     def get_diff_xs_ratio_to_ruth_vis(self, sub_params):
+        """
+        Get differential cross-section ratio to Rutherford for visualization.
+
+        Parameters
+        ----------
+        sub_params : OrderedDict
+            Sub-parameters for the model.
+
+        Returns
+        -------
+        object
+            Differential cross-section ratio.
+        """
         xs = self.xs_vis(sub_params)
         return xs.dsdo / self.visualization_workspace.rutherford
 
@@ -173,7 +362,23 @@ def elm_model(
     sub_params: OrderedDict,
     workspace: jitr.xs.elastic.DifferentialWorkspace,
 ):
+    """
+    ELM model function.
 
+    Parameters
+    ----------
+    constraint : DifferentialElasticConstraint
+        Constraint object.
+    sub_params : OrderedDict
+        Sub-parameters for the model.
+    workspace : jitr.xs.elastic.DifferentialWorkspace
+        Workspace for differential calculations.
+
+    Returns
+    -------
+    object
+        Model result.
+    """
     (
         isoscalar_params,
         isovector_params,
@@ -207,6 +412,18 @@ def kduq_model(
     sub_params: OrderedDict,
     workspace: jitr.xs.elastic.DifferentialWorkspace,
 ):
+    """
+    KDUQ model function.
+
+    Parameters
+    ----------
+    constraint : DifferentialElasticConstraint
+        Constraint object.
+    sub_params : OrderedDict
+        Sub-parameters for the model.
+    workspace : jitr.xs.elastic.DifferentialWorkspace
+        Workspace for differential calculations.
+    """
     # TODO
     pass
 
@@ -216,6 +433,18 @@ def wlh_model(
     sub_params: OrderedDict,
     workspace: jitr.xs.elastic.DifferentialWorkspace,
 ):
+    """
+    WLH model function.
+
+    Parameters
+    ----------
+    constraint : DifferentialElasticConstraint
+        Constraint object.
+    sub_params : OrderedDict
+        Sub-parameters for the model.
+    workspace : jitr.xs.elastic.DifferentialWorkspace
+        Workspace for differential calculations.
+    """
     # TODO
     pass
 
@@ -228,7 +457,29 @@ def set_up_solver(
     core_solver: jitr.rmatrix.Solver,
     lmax: int,
 ):
+    """
+    Set up the solver for the reaction.
 
+    Parameters
+    ----------
+    reaction : exfor_tools.Reaction
+        Reaction information.
+    Elab : float
+        Laboratory energy.
+    angles_cal : np.array
+        Calibration angles.
+    angles_vis : np.array
+        Visualization angles.
+    core_solver : jitr.rmatrix.Solver
+        Core solver.
+    lmax : int
+        Maximum angular momentum.
+
+    Returns
+    -------
+    tuple
+        Calibrator and visualizer workspaces.
+    """
     mass_target = jitr.utils.kinematics.mass(*reaction.target)
     mass_projectile = jitr.utils.kinematics.mass(*reaction.projectile)
 
