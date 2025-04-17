@@ -267,5 +267,3 @@ def set_up_solver(
     )
 
     return calibrator, visualizer
-
-
