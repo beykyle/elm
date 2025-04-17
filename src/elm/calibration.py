@@ -1,5 +1,7 @@
 from collections import OrderedDict
+
 import numpy as np
+
 import exfor_tools
 import jitr
 
@@ -47,6 +49,7 @@ class DifferentialElasticConstraint(Constraint):
     def __init__(
         self,
         n_params: int,
+        model,
         reaction: exfor_tools.Reaction,
         quantity: str,
         measurement: exfor_tools.AngularDistributionSysStatErr,
@@ -58,6 +61,7 @@ class DifferentialElasticConstraint(Constraint):
     ):
         self.reaction = reaction
         self.quantity = quantity
+        self.model = model
         self.measurement = measurement
 
         if self.measurement.y_units == "barns/ster":
@@ -103,18 +107,18 @@ class DifferentialElasticConstraint(Constraint):
             channel_radius,
             lmax,
         )
-        self.calibration_model = calibrator
-        self.visualization_model = visualizer
+        self.calibration_workspace = calibrator
+        self.visualization_workspace = visualizer
 
-        self.Elab = self.calibration_model.Elab
-        self.mu = self.calibration_model.mu
-        self.Ecm = self.calibration_model.Ecm
-        self.k = self.calibration_model.k
-        self.eta = self.calibration_model.eta
+        self.Elab = self.calibration_workspace.Elab
+        self.mu = self.calibration_workspace.mu
+        self.Ecm = self.calibration_workspace.Ecm
+        self.k = self.calibration_workspace.k
+        self.eta = self.calibration_workspace.eta
 
         if absolute_xs and self.projectile[1] > 0:
-            self.exp.data[2, :] /= self.calibration_model.rutherford
-            self.exp.data[3, :] /= self.calibration_model.rutherford
+            self.exp.data[2, :] /= self.calibration_workspace.rutherford
+            self.exp.data[3, :] /= self.calibration_workspace.rutherford
 
         if self.quantity == "dXS/dA":
             self.f = self.get_diff_xs
@@ -137,71 +141,83 @@ class DifferentialElasticConstraint(Constraint):
         else:
             raise NotImplementedError("Only neutron and proton projectiles are valid")
 
-    def params(self, sub_params: OrderedDict):
-        # TODO allow for arbitrary mapping from params to xs, so e.g. KDUQ and WLH can be used
-        return calculate_parameters(
-            self.calibration_model.projectile,
-            self.calibration_model.target,
-            self.calibration_model.Ecm,
-            self.Ef,
-            sub_params,
-        )
+    def xs_cal(self, sub_params):
+        return self.model(self, sub_params, self.calibration_workspace)
 
-    def xs(
-        self,
-        sub_params: OrderedDict,
-        model: jitr.xs.elastic.DifferentialWorkspace,
-    ):
-        (
+    def xs_vis(self, sub_params):
+        return self.model(self, sub_params, self.visualization_workspace)
+
+    def get_Ay(self, sub_params):
+        return self.xs_cal(sub_params).Ay
+
+    def get_Ay_vis(self, sub_params):
+        return self.xs_vis(sub_params).Ay
+
+    def get_diff_xs(self, sub_params):
+        return self.xs_cal(sub_params).dsdo
+
+    def get_diff_xs_vis(self, sub_params):
+        return self.xs_vis(sub_params).dsdo
+
+    def get_diff_xs_ratio_to_ruth(self, sub_params):
+        xs = self.xs_cal(sub_params)
+        return xs.dsdo / self.calibration_workspace.rutherford
+
+    def get_diff_xs_ratio_to_ruth_vis(self, sub_params):
+        xs = self.xs_vis(sub_params)
+        return xs.dsdo / self.visualization_workspace.rutherford
+
+
+def elm_model(
+    constraint: DifferentialElasticConstraint,
+    sub_params: OrderedDict,
+    workspace: jitr.xs.elastic.DifferentialWorkspace,
+):
+
+    (
+        isoscalar_params,
+        isovector_params,
+        spin_orbit_params,
+        coul_params,
+        asym_factor,
+    ) = calculate_parameters(
+        workspace.projectile,
+        workspace.target,
+        workspace.Ecm,
+        constraint.Ef,
+        sub_params,
+    )
+
+    return workspace.xs(
+        interaction_central=central_plus_coulomb,
+        interaction_spin_orbit=spin_orbit,
+        args_central=(
+            workspace.projectile,
+            asym_factor,
             isoscalar_params,
             isovector_params,
-            spin_orbit_params,
             coul_params,
-            asym_factor,
-        ) = self.params(sub_params)
+        ),
+        args_spin_orbit=spin_orbit_params,
+    )
 
-        return model.xs(
-            interaction_central=central_plus_coulomb,
-            interaction_spin_orbit=spin_orbit,
-            args_central=(
-                self.calibration_model.projectile,
-                asym_factor,
-                isoscalar_params,
-                isovector_params,
-                coul_params,
-            ),
-            args_spin_orbit=spin_orbit_params,
-        )
 
-    def xs_cal(self, sub_params: OrderedDict):
-        return self.xs(sub_params, self.calibration_model)
+def kduq_model(
+    constraint: DifferentialElasticConstraint,
+    sub_params: OrderedDict,
+    workspace: jitr.xs.elastic.DifferentialWorkspace,
+):
+    # TODO
+    pass
 
-    def xs_vis(self, sub_params: OrderedDict):
-        return self.xs(sub_params, self.visualization_model)
 
-    def get_Ay(self, sub_params: OrderedDict):
-        xs = self.xs_cal(sub_params)
-        return xs.Ay
-
-    def get_Ay_vis(self, sub_params: OrderedDict):
-        xs = self.xs_vis(sub_params)
-        return xs.Ay
-
-    def get_diff_xs(self, sub_params: OrderedDict):
-        xs = self.xs_cal(sub_params)
-        return xs.dsdo
-
-    def get_diff_xs_vis(self, sub_params: OrderedDict):
-        xs = self.xs_vis(sub_params)
-        return xs.dsdo
-
-    def get_diff_xs_ratio_to_ruth(self, sub_params: OrderedDict):
-        xs = self.xs_cal(sub_params)
-        return xs.dsdo / self.calibration_model.rutherford
-
-    def get_diff_xs_ratio_to_ruth_vis(self, sub_params: OrderedDict):
-        xs = self.xs_vis(sub_params)
-        return xs.dsdo / self.visualization_model.rutherford
+def wlh_model(
+    constraint: DifferentialElasticConstraint,
+    sub_params: OrderedDict,
+    workspace: jitr.xs.elastic.DifferentialWorkspace,
+):
+    # TODO
+    pass
 
 
 def set_up_solver(
@@ -251,3 +267,5 @@ def set_up_solver(
     )
 
     return calibrator, visualizer
+
+
