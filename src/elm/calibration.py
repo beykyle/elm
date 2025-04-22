@@ -8,6 +8,7 @@ import jitr
 from .model import calculate_parameters, central_plus_coulomb, spin_orbit
 
 
+# TODO make this model agnostic, e.g. pass in model callable
 class Constraint:
     """
     Represents an experimental constraint y, with a covariance matrix,
@@ -15,16 +16,13 @@ class Constraint:
 
     Parameters
     ----------
-    n_params : int
-        Number of parameters.
     y : np.ndarray
         Experimental data.
     covariance : np.ndarray
         Covariance matrix.
     """
 
-    def __init__(self, n_params: int, y: np.ndarray, covariance: np.ndarray):
-        self.n_params = n_params
+    def __init__(self, y: np.ndarray, covariance: np.ndarray):
         self.y = y
         if len(self.y.shape) > 1:
             raise ValueError(f"data must be 1D; y was {len(self.y.shape)}D")
@@ -90,63 +88,48 @@ class ChExIASConstraint(Constraint):
     """
     Placeholder for ChExIASConstraint.
     """
+
     pass  # TODO
 
 
+# TODO separate Constraint from solver
 class DifferentialElasticConstraint(Constraint):
     """
-    Represents a differential elastic constraint.
+    Represents a differential elastic constraint for an arbitrary model
+    that provides callables to jitr.xs.elastic.DifferentialWorkspace
 
     Parameters
     ----------
-    n_params : int
-        Number of parameters.
-    model : callable
-        Model function which takes in three arguments:
-            constraint: DifferentialElasticConstraint
-                `self` of the DifferentialElasticConstraint object initialized
-                by this function
-            sub_params: OrderedDict
-                the parameters to pass to the ELM
-            model: jitr.xs.elastic.DifferentialWorkspace
-                the workspace used to calculate the cross section, typically
-                will be either self.workspace_cal or self.workspace_vis
-        Returns:
-            xs : jitr.xs.elastic.ElasticXS
-    reaction : exfor_tools.Reaction
+    reaction : exfor_tools.reaction.Reaction
         Reaction information.
     quantity : str
         Quantity type.
-    measurement : exfor_tools.AngularDistributionSysStatErr
+    measurement :
+        exfor_tools.angular_distribution.AngularDistributionSysStatErr
         Measurement data.
     angles_vis : np.array
-        Visualization angles.
+        Visualization angles in degrees.
     core_solver : jitr.rmatrix.Solver
         Core solver.
-    channel_radius : float
-        Channel radius.
     lmax : int, optional
         Maximum angular momentum, by default 20.
-    absolute_xs : bool, optional
+    divide_by_Rutherford : bool, optional
         Absolute cross-section flag, by default True.
     """
 
     def __init__(
         self,
-        n_params: int,
-        model,
-        reaction: exfor_tools.Reaction,
+        reaction: exfor_tools.reaction.Reaction,
         quantity: str,
-        measurement: exfor_tools.AngularDistributionSysStatErr,
+        measurement: exfor_tools.angular_distribution.AngularDistributionSysStatErr,
         angles_vis: np.array,
         core_solver: jitr.rmatrix.Solver,
-        channel_radius: float,
         lmax: int = 20,
-        absolute_xs=True,
+        divide_by_Rutherford=False,
+        workspaces=None,
     ):
         self.reaction = reaction
         self.quantity = quantity
-        self.model = model
         self.measurement = measurement
 
         if self.measurement.y_units == "barns/ster":
@@ -162,10 +145,10 @@ class DifferentialElasticConstraint(Constraint):
         else:
             raise ValueError(f"invalid y units {self.measurement.y_units}")
 
-        self.x_vis = angles_vis
-        self.x_cal = self.measurement.x * np.pi / 180
         if self.measurement.x_units != "degrees":
             raise ValueError(f"invalid x units {self.measurement.x_units}")
+        self.x_vis = angles_vis * np.pi / 180
+        self.x_cal = self.measurement.x * np.pi / 180
 
         covariance = np.diag(self.measurement.statistical_err**2)
         if self.measurement.systematic_norm_err > 0:
@@ -181,27 +164,31 @@ class DifferentialElasticConstraint(Constraint):
             raise NotImplementedError(
                 "Nonuniform systematic error covariance not implemented"
             )
-        super().__init__(self.n_params, self.measurement.y, covariance)
+        super().__init__(self.measurement.y, covariance)
 
-        calibrator, visualizer = set_up_solver(
-            self.reaction,
-            self.measurement.Einc,
-            self.angles_cal,
-            self.angles_vis,
-            core_solver,
-            channel_radius,
-            lmax,
-        )
+        if workspaces is not None:
+            calibrator, visualizer = workspaces
+        else:
+            calibrator, visualizer = set_up_solver(
+                self.reaction,
+                self.measurement.Einc,
+                self.x_cal,
+                self.x_vis,
+                core_solver,
+                lmax,
+            )
         self.calibration_workspace = calibrator
         self.visualization_workspace = visualizer
 
-        self.Elab = self.calibration_workspace.Elab
+        self.Elab = self.measurement.Einc
         self.mu = self.calibration_workspace.mu
         self.Ecm = self.calibration_workspace.Ecm
         self.k = self.calibration_workspace.k
         self.eta = self.calibration_workspace.eta
 
-        if absolute_xs and self.projectile[1] > 0:
+        if divide_by_Rutherford:
+            if not self.quantity == "dXS/dRuth":
+                raise ValueError(f"Why are you dividing by Rutherford? Quantity is {self.quantity}")
             self.exp.data[2, :] /= self.calibration_workspace.rutherford
             self.exp.data[3, :] /= self.calibration_workspace.rutherford
 
@@ -209,7 +196,7 @@ class DifferentialElasticConstraint(Constraint):
             self.f = self.get_diff_xs
             self.f_vis = self.get_diff_xs_vis
         elif self.quantity == "dXS/dRuth":
-            if self.reaction.projectile[1] == 0:
+            if self.reaction.projectile.Z == 0:
                 raise ValueError("Can't do dXS/dRuth for uncharged projectile")
             self.f = self.get_diff_xs_ratio_to_ruth
             self.f_vis = self.get_diff_xs_ratio_to_ruth_vis
@@ -219,14 +206,8 @@ class DifferentialElasticConstraint(Constraint):
         else:
             raise NotImplementedError(f"{self.quantity} not supported")
 
-        if self.reaction.projectile == (1, 1):
-            self.Ef = jitr.utils.kinematics.proton_fermi_energy(*self.reaction.target)
-        elif self.reaction.projectile == (1, 0):
-            self.Ef = jitr.utils.kinematics.neutron_fermi_energy(*self.reaction.target)
-        else:
-            raise NotImplementedError("Only neutron and proton projectiles are valid")
 
-    def xs_cal(self, sub_params):
+    def xs_cal(self, sub_params, model):
         """
         Calculate cross-section for calibration.
 
@@ -240,9 +221,9 @@ class DifferentialElasticConstraint(Constraint):
         object
             Cross-section result.
         """
-        return self.model(self, sub_params, self.calibration_workspace)
+        return model(sub_params, self.calibration_workspace, self.reaction)
 
-    def xs_vis(self, sub_params):
+    def xs_vis(self, sub_params, model):
         """
         Calculate cross-section for visualization.
 
@@ -256,9 +237,9 @@ class DifferentialElasticConstraint(Constraint):
         object
             Cross-section result.
         """
-        return self.model(self, sub_params, self.visualization_workspace)
+        return model(sub_params, self.visualization_workspace, self.reaction)
 
-    def get_Ay(self, sub_params):
+    def get_Ay(self, sub_params, model):
         """
         Get analyzing power Ay.
 
@@ -272,9 +253,9 @@ class DifferentialElasticConstraint(Constraint):
         object
             Analyzing power Ay.
         """
-        return self.xs_cal(sub_params).Ay
+        return self.xs_cal(sub_params, model).Ay
 
-    def get_Ay_vis(self, sub_params):
+    def get_Ay_vis(self, sub_params, model):
         """
         Get analyzing power Ay for visualization.
 
@@ -288,9 +269,9 @@ class DifferentialElasticConstraint(Constraint):
         object
             Analyzing power Ay.
         """
-        return self.xs_vis(sub_params).Ay
+        return self.xs_vis(sub_params, model).Ay
 
-    def get_diff_xs(self, sub_params):
+    def get_diff_xs(self, sub_params, model):
         """
         Get differential cross-section.
 
@@ -304,9 +285,9 @@ class DifferentialElasticConstraint(Constraint):
         object
             Differential cross-section.
         """
-        return self.xs_cal(sub_params).dsdo
+        return self.xs_cal(sub_params, model).dsdo
 
-    def get_diff_xs_vis(self, sub_params):
+    def get_diff_xs_vis(self, sub_params, model):
         """
         Get differential cross-section for visualization.
 
@@ -320,9 +301,9 @@ class DifferentialElasticConstraint(Constraint):
         object
             Differential cross-section.
         """
-        return self.xs_vis(sub_params).dsdo
+        return self.xs_vis(sub_params, model).dsdo
 
-    def get_diff_xs_ratio_to_ruth(self, sub_params):
+    def get_diff_xs_ratio_to_ruth(self, sub_params, model):
         """
         Get differential cross-section ratio to Rutherford.
 
@@ -336,10 +317,10 @@ class DifferentialElasticConstraint(Constraint):
         object
             Differential cross-section ratio.
         """
-        xs = self.xs_cal(sub_params)
+        xs = self.xs_cal(sub_params, model)
         return xs.dsdo / self.calibration_workspace.rutherford
 
-    def get_diff_xs_ratio_to_ruth_vis(self, sub_params):
+    def get_diff_xs_ratio_to_ruth_vis(self, sub_params, model):
         """
         Get differential cross-section ratio to Rutherford for visualization.
 
@@ -353,14 +334,14 @@ class DifferentialElasticConstraint(Constraint):
         object
             Differential cross-section ratio.
         """
-        xs = self.xs_vis(sub_params)
+        xs = self.xs_vis(sub_params, model)
         return xs.dsdo / self.visualization_workspace.rutherford
 
 
 def elm_model(
-    constraint: DifferentialElasticConstraint,
     sub_params: OrderedDict,
     workspace: jitr.xs.elastic.DifferentialWorkspace,
+    reaction: exfor_tools.reaction.Reaction,
 ):
     """
     ELM model function.
@@ -379,6 +360,10 @@ def elm_model(
     object
         Model result.
     """
+    if workspace.projectile == (1, 1):
+        Ef = reaction.target.Efp
+    elif workspace.projectile == (1, 0):
+        Ef = reaction.target.Efn
     (
         isoscalar_params,
         isovector_params,
@@ -389,7 +374,7 @@ def elm_model(
         workspace.projectile,
         workspace.target,
         workspace.Ecm,
-        constraint.Ef,
+        Ef,
         sub_params,
     )
 
@@ -408,9 +393,9 @@ def elm_model(
 
 
 def kduq_model(
-    constraint: DifferentialElasticConstraint,
     sub_params: OrderedDict,
     workspace: jitr.xs.elastic.DifferentialWorkspace,
+    reaction: exfor_tools.reaction.Reaction,
 ):
     """
     KDUQ model function.
@@ -429,9 +414,9 @@ def kduq_model(
 
 
 def wlh_model(
-    constraint: DifferentialElasticConstraint,
     sub_params: OrderedDict,
     workspace: jitr.xs.elastic.DifferentialWorkspace,
+    reaction: exfor_tools.reaction.Reaction,
 ):
     """
     WLH model function.
@@ -450,10 +435,10 @@ def wlh_model(
 
 
 def set_up_solver(
-    reaction: exfor_tools.Reaction,
+    reaction: exfor_tools.reaction.Reaction,
     Elab: float,
-    angles_cal: np.array,
-    angles_vis: np.array,
+    x_cal: np.array,
+    x_vis: np.array,
     core_solver: jitr.rmatrix.Solver,
     lmax: int,
 ):
@@ -466,9 +451,9 @@ def set_up_solver(
         Reaction information.
     Elab : float
         Laboratory energy.
-    angles_cal : np.array
+    x_cal : np.array
         Calibration angles.
-    angles_vis : np.array
+    x_vis : np.array
         Visualization angles.
     core_solver : jitr.rmatrix.Solver
         Core solver.
@@ -480,18 +465,25 @@ def set_up_solver(
     tuple
         Calibrator and visualizer workspaces.
     """
-    mass_target = jitr.utils.kinematics.mass(*reaction.target)
-    mass_projectile = jitr.utils.kinematics.mass(*reaction.projectile)
+    mass_target = reaction.target.m0
+    mass_projectile = reaction.projectile.m0
 
-    Zproj = reaction.projectile[1]
-    Ztarget = reaction.target[1]
+    Zproj = reaction.projectile.Z
+    Ztarget = reaction.target.Z
 
     # get kinematics and parameters for this experiment
     kinematics = jitr.utils.kinematics.semi_relativistic_kinematics(
         mass_target, mass_projectile, Elab, Zproj * Ztarget
     )
-    channel_radius_fm = jitr.utils.interaction_range(reaction.projectile[0])
+    channel_radius_fm = jitr.utils.interaction_range(reaction.projectile.A)
     a = channel_radius_fm * kinematics.k + 2 * np.pi
+    Ns = jitr.utils.suggested_basis_size(a)
+    N = core_solver.kernel.quadrature.nbasis
+    if Ns > N:
+        raise ValueError(
+            f"Suggested basis size for dimensionless channel radius {a} "
+            f"is {Ns}, but core_solver only has {N}"
+        )
     sys = jitr.reactions.ProjectileTargetSystem(
         channel_radius=a,
         lmax=lmax,
@@ -503,18 +495,18 @@ def set_up_solver(
     )
 
     integral_ws = jitr.xs.elastic.IntegralWorkspace(
-        projectile=reaction.projectile,
-        target=reaction.target,
+        projectile=tuple(reaction.projectile),
+        target=tuple(reaction.target),
         sys=sys,
         kinematics=kinematics,
         solver=core_solver,
     )
 
     calibrator = jitr.xs.elastic.DifferentialWorkspace(
-        integral_workspace=integral_ws, angles=angles_cal
+        integral_workspace=integral_ws, angles=x_cal
     )
     visualizer = jitr.xs.elastic.DifferentialWorkspace(
-        integral_workspace=integral_ws, angles=angles_vis
+        integral_workspace=integral_ws, angles=x_vis
     )
 
     return calibrator, visualizer
