@@ -119,13 +119,8 @@ class Constraint:
 
 class ReactionDistribution(Constraint):
     """
-    Represents the constraint for a particular distribution calculating the
-    appropriate covariance matrix given statistical and systematic
-    errors
-
-    Parameters
-    ----------
-
+    Represents the constraint for a particular reaction observable, calculating the
+    appropriate covariance matrix given statistical and systematic errors.
     """
 
     def __init__(
@@ -137,6 +132,27 @@ class ReactionDistribution(Constraint):
         include_sys_offset_err=True,
         include_sys_gen_err=True,
     ):
+        """
+        Params:
+        quantity : str
+            The name of the quantity being measured.
+        measurement : AngularDistributionSysStatErr
+            An object containing the angular distribution measurements along with
+            their statistical and systematic errors.
+        normalize : float, optional
+            A value to normalize the measurements and errors. If None, no normalization
+            is applied. Default is None.
+        include_sys_norm_err : bool, optional
+            If True, includes systematic normalization error in the covariance matrix.
+            Default is True.
+        include_sys_offset_err : bool, optional
+            If True, includes systematic offset error in the covariance matrix.
+            Default is True.
+        include_sys_gen_err : bool, optional
+            If True, includes general systematic error in the covariance matrix.
+            Default is True.
+
+        """
         self.quantity = quantity
         self.subentry = measurement.subentry
         x = np.copy(measurement.x)
@@ -175,9 +191,9 @@ def check_angle_grid(angles_rad: np.ndarray, name: str):
 
 
 class ElasticModel:
-    r"""
+    """
     Encapsulates any reaction model for differential elastic quantities using a
-    jitr.xs.elastic.DifferentialWorkspace
+    jitr.xs.elastic.DifferentialWorkspace.
     """
 
     def __init__(
@@ -190,6 +206,18 @@ class ElasticModel:
         core_solver: rmatrix.Solver,
         lmax: int = 20,
     ):
+        """
+        Params:
+            quantity: The type of quantity to be calculated (e.g., "dXS/dA",
+                "dXS/dRuth", "Ay").
+            reaction: The reaction object containing details of the reaction.
+            Elab: The laboratory energy.
+            angles_rad_vis: Array of angles in radians for visualization.
+            angles_rad_constraint: Array of angles in radians corresponding to
+                experimentally measured constraints.
+            core_solver: The core solver used for calculations.
+            lmax: Maximum angular momentum, defaults to 20.
+        """
         self.quantity = quantity
         self.reaction = reaction
 
@@ -224,7 +252,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> np.ndarray:
-        """ """
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Calculated quantity as a numpy array.
+        """
         return self.get_quantity(model, params)
 
     def get_xs_constraint(
@@ -232,6 +266,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> ElasticXS:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Elastic cross-section.
+        """
         return model(
             self.constraint_workspace, model, params, self.constraint_workspace
         )
@@ -241,6 +282,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> ElasticXS:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Elastic cross-section.
+        """
         return model(
             self.constraint_workspace, model, params, self.visualization_workspace
         )
@@ -250,6 +298,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> np.ndarray:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Differential cross-section as a numpy array.
+        """
         return self.get_xs_constraint(model, params).dsdo
 
     def get_diff_xs_vis(
@@ -257,6 +312,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> np.ndarray:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Differential cross-section as a numpy array.
+        """
         return self.get_xs_vis(model, params).dsdo
 
     def get_Ay(
@@ -264,6 +326,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> np.ndarray:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Analyzing power Ay as a numpy array.
+        """
         return self.get_xs_constraint(model, params).Ay
 
     def get_Ay_vis(
@@ -271,6 +340,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> np.ndarray:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Analyzing power Ay as a numpy array.
+        """
         return self.get_xs_vis(model, params).Ay
 
     def get_diff_xs_ratio_Rutherford(
@@ -278,6 +354,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> np.ndarray:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Ratio as a numpy array.
+        """
         return (
             self.get_xs_constraint(model, params).dsdo
             / self.constraint_workspace.rutherford
@@ -288,6 +371,13 @@ class ElasticModel:
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         params: OrderedDict,
     ) -> np.ndarray:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Ratio as a numpy array.
+        """
         return (
             self.get_xs_vis(model, params).dsdo
             / self.visualization_workspace.rutherford
