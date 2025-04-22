@@ -1,31 +1,38 @@
 from collections import OrderedDict
+from typing import Callable
 
 import numpy as np
+from scipy.stats import multivariate_normal
 
-import exfor_tools
+from exfor_tools.reaction import Reaction
+from exfor_tools.angular_distribution import AngularDistributionSysStatErr
+
 import jitr
+from jitr.xs.elastic import DifferentialWorkspace, ElasticXS
+from jitr import rmatrix
 
-from .model import calculate_parameters, central_plus_coulomb, spin_orbit
 
-
-# TODO make this model agnostic, e.g. pass in model callable
 class Constraint:
     """
-    Represents an experimental constraint y, with a covariance matrix,
-    and some model for y, f, that takes in some params.
+    Represents an experimental constraint y, which is assumed to be
+    a random variate distributed according to a multivariate_normal
+    around y with an arbitrary covariance matrix
 
     Parameters
     ----------
     y : np.ndarray
-        Experimental data.
+        Experimental data output
+    x : np.array
+        Experimental data input
     covariance : np.ndarray
         Covariance matrix.
     """
 
-    def __init__(self, y: np.ndarray, covariance: np.ndarray):
+    def __init__(self, y: np.ndarray, x: np.ndarray, covariance: np.ndarray):
         self.y = y
         if len(self.y.shape) > 1:
             raise ValueError(f"data must be 1D; y was {len(self.y.shape)}D")
+        self.x = x
         self.n_data_pts = y.shape[0]
         if covariance.shape == (self.n_data_pts,):
             self.covariance = np.diag(covariance)
@@ -37,20 +44,13 @@ class Constraint:
                 f"{covariance.shape} for Constraint with "
                 f"{self.n_data_pts} data points"
             )
+
         self.cov_inv = np.linalg.inv(self.covariance)
+        self.dist = multivariate_normal(
+            mean=self.y, cov=self.covariance, allow_singular=True
+        )
 
-    def f(self, params):
-        """
-        Model function for y.
-
-        Parameters
-        ----------
-        params : array-like
-            Parameters for the model.
-        """
-        pass
-
-    def residual(self, params):
+    def residual(self, model, params):
         """
         Calculate the residuals.
 
@@ -64,11 +64,11 @@ class Constraint:
         np.ndarray
             Residuals.
         """
-        return self.y - self.f(params)
+        return self.y - model(self.x, params)
 
-    def chi2(self, params):
+    def chi2(self, model, params):
         """
-        Calculate the chi-squared statistic.
+        Calculate the generalised chi-squared statistic.
 
         Parameters
         ----------
@@ -80,366 +80,226 @@ class Constraint:
         float
             Chi-squared statistic.
         """
-        delta = self.residual(params)
+        delta = self.residual(model, params)
         return delta.T @ self.cov_inv @ delta
 
+    def num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
+        """
+        Returns the number of points in y that fall between ylow and yhigh,
+        useful for calculating emperical coverages
 
-class ChExIASConstraint(Constraint):
+        Parameters
+        ----------
+        ylow : np.ndarray, same shape as self.y
+        yhigh : np.ndarray, same shape as self.y
+
+        Returns
+        -------
+        int
+        """
+        return int(np.sum(np.logical_and(self.y >= ylow, self.y < yhigh)))
+
+    def probability_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
+        """
+        Returns the probability that self.y falls within ylow and yhigh, for a
+        generalized measure of empirical coverage
+
+        Parameters
+        ----------
+        ylow : np.ndarray, same shape as self.y
+        yhigh : np.ndarray, same shape as self.y
+
+        Returns
+        -------
+        float
+        """
+        prob = self.dist.cdf(yhigh) - self.dist.cdf(ylow)
+        return prob
+
+
+class ReactionDistribution(Constraint):
     """
-    Placeholder for ChExIASConstraint.
-    """
-
-    pass  # TODO
-
-
-# TODO separate Constraint from solver
-class DifferentialElasticConstraint(Constraint):
-    """
-    Represents a differential elastic constraint for an arbitrary model
-    that provides callables to jitr.xs.elastic.DifferentialWorkspace
+    Represents the constraint for a particular distribution calculating the
+    appropriate covariance matrix given statistical and systematic
+    errors
 
     Parameters
     ----------
-    reaction : exfor_tools.reaction.Reaction
-        Reaction information.
-    quantity : str
-        Quantity type.
-    measurement :
-        exfor_tools.angular_distribution.AngularDistributionSysStatErr
-        Measurement data.
-    angles_vis : np.array
-        Visualization angles in degrees.
-    core_solver : jitr.rmatrix.Solver
-        Core solver.
-    lmax : int, optional
-        Maximum angular momentum, by default 20.
-    divide_by_Rutherford : bool, optional
-        Absolute cross-section flag, by default True.
+
     """
 
     def __init__(
         self,
-        reaction: exfor_tools.reaction.Reaction,
         quantity: str,
-        measurement: exfor_tools.angular_distribution.AngularDistributionSysStatErr,
-        angles_vis: np.array,
-        core_solver: jitr.rmatrix.Solver,
-        lmax: int = 20,
-        divide_by_Rutherford=False,
-        workspaces=None,
+        measurement: AngularDistributionSysStatErr,
+        normalize=None,
+        include_sys_norm_err=True,
+        include_sys_offset_err=True,
+        include_sys_gen_err=True,
     ):
-        self.reaction = reaction
         self.quantity = quantity
-        self.measurement = measurement
+        self.subentry = measurement.subentry
+        x = np.copy(measurement.x)
+        y = np.copy(measurement.y)
+        stat_err_y = np.copy(measurement.statistical_err)
+        sys_err_norm = np.copy(measurement.systematic_norm_err)
+        sys_err_offset = np.copy(measurement.systematic_offset_err)
+        sys_err_general = np.copy(measurement.general_systematic_err)
 
-        if self.measurement.y_units == "barns/ster":
-            self.measurement.y /= 1000
-            self.measurement.statistical_err /= 1000
-            self.measurement.systematic_offset_err /= 1000
-            self.measurement.y_units = "mb/Sr"
-            assert self.quantity == "dXS/dA"
-        elif self.measurement.y_units == "mb/Sr":
-            assert self.quantity == "dXS/dA"
-        elif self.measurement.y_units == "no-dim":
-            assert self.quantity == "Ay" or self.quantity == "dXS/dRuth"
-        else:
-            raise ValueError(f"invalid y units {self.measurement.y_units}")
+        if normalize is not None:
+            y /= normalize
+            stat_err_y /= normalize
+            sys_err_offset /= normalize
+            sys_err_general /= normalize
 
-        if self.measurement.x_units != "degrees":
-            raise ValueError(f"invalid x units {self.measurement.x_units}")
-        self.x_vis = angles_vis * np.pi / 180
-        self.x_cal = self.measurement.x * np.pi / 180
+        covariance = np.diag(stat_err_y**2)
+        if include_sys_norm_err:
+            covariance += np.outer(y, y) * sys_err_norm**2
+        if include_sys_offset_err:
+            n = y.shape[0]
+            covariance += np.ones((n, n)) * sys_err_offset
+        if include_sys_gen_err:
+            covariance += np.outer(sys_err_general, sys_err_general)
+        super().__init__(y, x, covariance)
+        self.stat_err_y = stat_err_y
+        self.sys_err_norm = sys_err_norm
+        self.sys_err_offset = sys_err_offset
+        self.sys_err_general = sys_err_general
 
-        covariance = np.diag(self.measurement.statistical_err**2)
-        if self.measurement.systematic_norm_err > 0:
-            covariance += (
-                np.outer(self.measurement.y, self.measurement.y)
-                * self.measurement.systematic_norm_err**2
-            )
-        if self.measurement.systematic_offset_err > 0:
-            raise NotImplementedError(
-                "Systematic offset error covariance not implemented"
-            )
-        if self.measurement.general_systematic_err > 0:
-            raise NotImplementedError(
-                "Nonuniform systematic error covariance not implemented"
-            )
-        super().__init__(self.measurement.y, covariance)
 
-        if workspaces is not None:
-            calibrator, visualizer = workspaces
-        else:
-            calibrator, visualizer = set_up_solver(
-                self.reaction,
-                self.measurement.Einc,
-                self.x_cal,
-                self.x_vis,
-                core_solver,
-                lmax,
-            )
-        self.calibration_workspace = calibrator
-        self.visualization_workspace = visualizer
+def check_angle_grid(angles_rad: np.ndarray, name: str):
+    if len(angles_rad.shape) > 1:
+        raise ValueError(f"{name} must be 1D, is {len(angles_rad.shape)}D")
+    if angles_rad[0] < 0 or angles_rad[-1] > np.pi:
+        raise ValueError(f"{name} must be on [0,pi)")
 
-        self.Elab = self.measurement.Einc
-        self.mu = self.calibration_workspace.mu
-        self.Ecm = self.calibration_workspace.Ecm
-        self.k = self.calibration_workspace.k
-        self.eta = self.calibration_workspace.eta
 
-        if divide_by_Rutherford:
-            if not self.quantity == "dXS/dRuth":
-                raise ValueError(f"Why are you dividing by Rutherford? Quantity is {self.quantity}")
-            self.exp.data[2, :] /= self.calibration_workspace.rutherford
-            self.exp.data[3, :] /= self.calibration_workspace.rutherford
+class ElasticModel:
+    r"""
+    Encapsulates any reaction model for differential elastic quantities using a
+    jitr.xs.elastic.DifferentialWorkspace
+    """
+
+    def __init__(
+        self,
+        quantity: str,
+        reaction: Reaction,
+        Elab: float,
+        angles_rad_vis: np.ndarray,
+        angles_rad_constraint: np.ndarray,
+        core_solver: rmatrix.Solver,
+        lmax: int = 20,
+    ):
+        self.quantity = quantity
+        self.reaction = reaction
+
+        check_angle_grid(angles_rad_vis, "angles_rad_vis")
+        check_angle_grid(angles_rad_constraint, "angles_rad_constraint")
+
+        constraint_ws, visualization_ws, kinematics = set_up_solver(
+            reaction,
+            Elab,
+            angles_rad_constraint,
+            angles_rad_vis,
+            core_solver,
+            lmax,
+        )
+        self.constraint_workspace = constraint_ws
+        self.visualization_workspace = visualization_ws
+        self.kinematics = kinematics
+        self.Elab = Elab
 
         if self.quantity == "dXS/dA":
-            self.f = self.get_diff_xs
-            self.f_vis = self.get_diff_xs_vis
+            self.get_quantity = self.get_diff_xs
+            self.get_quantity_vis = self.get_diff_xs_vis
         elif self.quantity == "dXS/dRuth":
-            if self.reaction.projectile.Z == 0:
-                raise ValueError("Can't do dXS/dRuth for uncharged projectile")
-            self.f = self.get_diff_xs_ratio_to_ruth
-            self.f_vis = self.get_diff_xs_ratio_to_ruth_vis
+            self.get_quantity = self.get_diff_xs_ratio_Rutherford
+            self.get_quantity_vis = self.get_diff_xs_ratio_Rutherford_vis
         elif self.quantity == "Ay":
-            self.f = self.get_Ay
-            self.f_vis = self.get_Ay_vis
-        else:
-            raise NotImplementedError(f"{self.quantity} not supported")
+            self.get_quantity = self.get_Ay
+            self.get_quantity_vis = self.get_Ay_vis
 
+    def __call__(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> np.ndarray:
+        """ """
+        return self.get_quantity(model, params)
 
-    def xs_cal(self, sub_params, model):
-        """
-        Calculate cross-section for calibration.
+    def get_xs_constraint(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> ElasticXS:
+        return model(
+            self.constraint_workspace, model, params, self.constraint_workspace
+        )
 
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
+    def get_xs_vis(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> ElasticXS:
+        return model(
+            self.constraint_workspace, model, params, self.visualization_workspace
+        )
 
-        Returns
-        -------
-        object
-            Cross-section result.
-        """
-        return model(sub_params, self.calibration_workspace, self.reaction)
+    def get_diff_xs(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> np.ndarray:
+        return self.get_xs_constraint(model, params).dsdo
 
-    def xs_vis(self, sub_params, model):
-        """
-        Calculate cross-section for visualization.
+    def get_diff_xs_vis(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> np.ndarray:
+        return self.get_xs_vis(model, params).dsdo
 
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
+    def get_Ay(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> np.ndarray:
+        return self.get_xs_constraint(model, params).Ay
 
-        Returns
-        -------
-        object
-            Cross-section result.
-        """
-        return model(sub_params, self.visualization_workspace, self.reaction)
+    def get_Ay_vis(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> np.ndarray:
+        return self.get_xs_vis(model, params).Ay
 
-    def get_Ay(self, sub_params, model):
-        """
-        Get analyzing power Ay.
+    def get_diff_xs_ratio_Rutherford(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> np.ndarray:
+        return (
+            self.get_xs_constraint(model, params).dsdo
+            / self.constraint_workspace.rutherford
+        )
 
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
-
-        Returns
-        -------
-        object
-            Analyzing power Ay.
-        """
-        return self.xs_cal(sub_params, model).Ay
-
-    def get_Ay_vis(self, sub_params, model):
-        """
-        Get analyzing power Ay for visualization.
-
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
-
-        Returns
-        -------
-        object
-            Analyzing power Ay.
-        """
-        return self.xs_vis(sub_params, model).Ay
-
-    def get_diff_xs(self, sub_params, model):
-        """
-        Get differential cross-section.
-
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
-
-        Returns
-        -------
-        object
-            Differential cross-section.
-        """
-        return self.xs_cal(sub_params, model).dsdo
-
-    def get_diff_xs_vis(self, sub_params, model):
-        """
-        Get differential cross-section for visualization.
-
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
-
-        Returns
-        -------
-        object
-            Differential cross-section.
-        """
-        return self.xs_vis(sub_params, model).dsdo
-
-    def get_diff_xs_ratio_to_ruth(self, sub_params, model):
-        """
-        Get differential cross-section ratio to Rutherford.
-
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
-
-        Returns
-        -------
-        object
-            Differential cross-section ratio.
-        """
-        xs = self.xs_cal(sub_params, model)
-        return xs.dsdo / self.calibration_workspace.rutherford
-
-    def get_diff_xs_ratio_to_ruth_vis(self, sub_params, model):
-        """
-        Get differential cross-section ratio to Rutherford for visualization.
-
-        Parameters
-        ----------
-        sub_params : OrderedDict
-            Sub-parameters for the model.
-
-        Returns
-        -------
-        object
-            Differential cross-section ratio.
-        """
-        xs = self.xs_vis(sub_params, model)
-        return xs.dsdo / self.visualization_workspace.rutherford
-
-
-def elm_model(
-    sub_params: OrderedDict,
-    workspace: jitr.xs.elastic.DifferentialWorkspace,
-    reaction: exfor_tools.reaction.Reaction,
-):
-    """
-    ELM model function.
-
-    Parameters
-    ----------
-    constraint : DifferentialElasticConstraint
-        Constraint object.
-    sub_params : OrderedDict
-        Sub-parameters for the model.
-    workspace : jitr.xs.elastic.DifferentialWorkspace
-        Workspace for differential calculations.
-
-    Returns
-    -------
-    object
-        Model result.
-    """
-    if workspace.projectile == (1, 1):
-        Ef = reaction.target.Efp
-    elif workspace.projectile == (1, 0):
-        Ef = reaction.target.Efn
-    (
-        isoscalar_params,
-        isovector_params,
-        spin_orbit_params,
-        coul_params,
-        asym_factor,
-    ) = calculate_parameters(
-        workspace.projectile,
-        workspace.target,
-        workspace.Ecm,
-        Ef,
-        sub_params,
-    )
-
-    return workspace.xs(
-        interaction_central=central_plus_coulomb,
-        interaction_spin_orbit=spin_orbit,
-        args_central=(
-            workspace.projectile,
-            asym_factor,
-            isoscalar_params,
-            isovector_params,
-            coul_params,
-        ),
-        args_spin_orbit=spin_orbit_params,
-    )
-
-
-def kduq_model(
-    sub_params: OrderedDict,
-    workspace: jitr.xs.elastic.DifferentialWorkspace,
-    reaction: exfor_tools.reaction.Reaction,
-):
-    """
-    KDUQ model function.
-
-    Parameters
-    ----------
-    constraint : DifferentialElasticConstraint
-        Constraint object.
-    sub_params : OrderedDict
-        Sub-parameters for the model.
-    workspace : jitr.xs.elastic.DifferentialWorkspace
-        Workspace for differential calculations.
-    """
-    # TODO
-    pass
-
-
-def wlh_model(
-    sub_params: OrderedDict,
-    workspace: jitr.xs.elastic.DifferentialWorkspace,
-    reaction: exfor_tools.reaction.Reaction,
-):
-    """
-    WLH model function.
-
-    Parameters
-    ----------
-    constraint : DifferentialElasticConstraint
-        Constraint object.
-    sub_params : OrderedDict
-        Sub-parameters for the model.
-    workspace : jitr.xs.elastic.DifferentialWorkspace
-        Workspace for differential calculations.
-    """
-    # TODO
-    pass
+    def get_diff_xs_ratio_Rutherford_vis(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        params: OrderedDict,
+    ) -> np.ndarray:
+        return (
+            self.get_xs_vis(model, params).dsdo
+            / self.visualization_workspace.rutherford
+        )
 
 
 def set_up_solver(
-    reaction: exfor_tools.reaction.Reaction,
+    reaction: Reaction,
     Elab: float,
-    x_cal: np.array,
-    x_vis: np.array,
-    core_solver: jitr.rmatrix.Solver,
+    angle_rad_constraint: np.array,
+    angle_rad_vis: np.array,
+    core_solver: rmatrix.Solver,
     lmax: int,
 ):
     """
@@ -451,10 +311,10 @@ def set_up_solver(
         Reaction information.
     Elab : float
         Laboratory energy.
-    x_cal : np.array
-        Calibration angles.
-    x_vis : np.array
-        Visualization angles.
+    angle_rad_constraint : np.array
+        Angles to compare to experiment (rad).
+    angle_rad_vis : np.array
+        Angles to visualize on (rad)
     core_solver : jitr.rmatrix.Solver
         Core solver.
     lmax : int
@@ -463,7 +323,7 @@ def set_up_solver(
     Returns
     -------
     tuple
-        Calibrator and visualizer workspaces.
+        constraint and visualization workspaces.
     """
     mass_target = reaction.target.m0
     mass_projectile = reaction.projectile.m0
@@ -502,11 +362,11 @@ def set_up_solver(
         solver=core_solver,
     )
 
-    calibrator = jitr.xs.elastic.DifferentialWorkspace(
-        integral_workspace=integral_ws, angles=x_cal
+    constraint_ws = jitr.xs.elastic.DifferentialWorkspace(
+        integral_workspace=integral_ws, angles=angle_rad_constraint
     )
-    visualizer = jitr.xs.elastic.DifferentialWorkspace(
-        integral_workspace=integral_ws, angles=x_vis
+    visualization_ws = jitr.xs.elastic.DifferentialWorkspace(
+        integral_workspace=integral_ws, angles=angle_rad_vis
     )
 
-    return calibrator, visualizer
+    return constraint_ws, visualization_ws, kinematics

@@ -108,12 +108,9 @@ def central_plus_coulomb(
     r, projectile, asym_factor, isoscalar_params, isovector_params, coulomb_params
 ):
     r"""sum of coulomb, isoscalar and isovector terms, without spin orbit"""
-    if projectile == (1, 1):
-        coul = coulomb_charged_sphere(r, *coulomb_params)
-    elif projectile == (1, 0):
-        asym_factor *= -1
-        coul = 0
-
+    Z = projectile[1]
+    asym_factor = (-1) ** (Z + 1)
+    coul = coulomb_charged_sphere(r, *coulomb_params) * np.sign(Z)
     nucl = isoscalar(r, *isoscalar_params) + asym_factor * isovector(
         r, *isovector_params
     )
@@ -128,17 +125,15 @@ def central(
     isovector_params,
 ):
     r"""sum of isoscalar and isovector terms, without spin orbit"""
-    if projectile == (1, 0):
-        asym_factor *= -1
-
-    nucl = isoscalar(r, *isoscalar_params) + asym_factor * isovector(
+    Z = projectile[1]
+    asym_factor = (-1) ** (Z + 1)
+    return isoscalar(r, *isoscalar_params) + asym_factor * isovector(
         r, *isovector_params
     )
-    return nucl
 
 
 def calculate_parameters(
-    projectile: tuple, target: tuple, E: float, Ef: float, sp: OrderedDict
+    projectile: tuple, target: tuple, E: float, Ef: float, params: OrderedDict
 ):
     r"""Calculate the parameters in the ELM for a given target isotope
     and energy, given a subparameter sample
@@ -147,7 +142,7 @@ def calculate_parameters(
         Z (int): target charge
         E (float): center-of-mass frame energy
         E  (float): Fermi energy for A,Z nucleus
-        sp (OrderedDict) : subparameter sample
+        params (OrderedDict) : subparameter sample
     Returns:
         isoscalar_params (tuple)
         isovector_params (tuple)
@@ -160,10 +155,10 @@ def calculate_parameters(
     asym_factor = (A - 2 * Z) / (A)
 
     # geometries
-    R0 = sp["r0"] + sp["r0A"] * A ** (1.0 / 3.0)
-    R1 = sp["r1"] + sp["r1A"] * A ** (1.0 / 3.0)
-    a0 = sp["a0"]
-    a1 = sp["a1"]
+    R0 = params["r0"] + params["r0A"] * A ** (1.0 / 3.0)
+    R1 = params["r1"] + params["r1A"] * A ** (1.0 / 3.0)
+    a0 = params["a0"]
+    a1 = params["a1"]
 
     # Coulomb radius equal to isoscalar radius
     RC = R0
@@ -174,20 +169,20 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = 1.0 + sp["alpha"] * dE  # + sp["beta"] * dE**2
-    erg_w = dE**2 / (dE**2 + sp["gamma_w"] ** 2)
-    erg_wd = dE**2 / (dE**2 + sp["gamma_d"] ** 2)
+    erg_v = 1.0 + params["alpha"] * dE  # + params["beta"] * dE**2
+    erg_w = dE**2 / (dE**2 + params["gamma_w"] ** 2)
+    erg_wd = dE**2 / (dE**2 + params["gamma_d"] ** 2)
 
     # isoscalar depths
-    V0 = sp["V0"] * erg_v
-    W0 = sp["W0"] * erg_w
-    Wd0 = sp["Wd0"] * erg_wd
-    Vso = 5.58  # sp["Vso"]
+    V0 = params["V0"] * erg_v
+    W0 = params["W0"] * erg_w
+    Wd0 = params["Wd0"] * erg_wd
+    Vso = 5.58  # params["Vso"]
 
     # isovector depths
-    V1 = sp["V1"] * erg_v
-    W1 = sp["W1"] * erg_w
-    Wd1 = sp["Wd1"] * erg_wd
+    V1 = params["V1"] * erg_v
+    W1 = params["W1"] * erg_w
+    Wd1 = params["Wd1"] * erg_wd
 
     return (
         (V0, W0, Wd0, R0, a0),
