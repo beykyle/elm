@@ -148,8 +148,8 @@ def calculate_parameters(
         asym_factor =  +(-) (N-Z)/(N+Z), for neutrons(protons)
     """
     # asymmetry for isovector dependence
-    A, Z = tuple(target)
-    Ap, Zp = tuple(projectile)
+    A, Z = target
+    Ap, Zp = projectile
     assert Ap == 1 and (Zp == 1 or Zp == 0)
     asym_factor = (A - 2 * Z) / (A)
     asym_factor *= (-1) ** (Zp)

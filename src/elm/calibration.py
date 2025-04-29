@@ -165,8 +165,10 @@ class ReactionDistribution(Constraint):
         if normalize is not None:
             y /= normalize
             stat_err_y /= normalize
-            sys_err_offset /= normalize
             sys_err_general /= normalize
+            if sys_err_offset > 0:
+                sys_err_general += sys_err_offset * np.ones_like(x) / normalize
+                sys_err_offset = 0
 
         covariance = np.diag(stat_err_y**2)
         if include_sys_norm_err:
