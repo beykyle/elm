@@ -5,13 +5,14 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
-from jitr.reactions.potentials import (
+from jitr.optical_potentials.potential_forms import (
     thomas_safe,
     woods_saxon_prime_safe,
     woods_saxon_safe,
     coulomb_charged_sphere,
 )
 from jitr.utils.constants import MASS_PION, ALPHA, HBARC
+from jitr.xs.elastic import DifferentialWorkspace
 
 
 class Parameter:
@@ -105,12 +106,11 @@ def spin_orbit(r, Vso, R0, a0):
 
 
 def central_plus_coulomb(
-    r, projectile, asym_factor, isoscalar_params, isovector_params, coulomb_params
+    r, asym_factor, isoscalar_params, isovector_params, coulomb_params
 ):
     r"""sum of coulomb, isoscalar and isovector terms, without spin orbit"""
-    Z = projectile[1]
-    asym_factor = (-1) ** (Z + 1)
-    coul = coulomb_charged_sphere(r, *coulomb_params) * np.sign(Z)
+    Z, Rc = coulomb_params
+    coul = coulomb_charged_sphere(r, *coulomb_params)
     nucl = isoscalar(r, *isoscalar_params) + asym_factor * isovector(
         r, *isovector_params
     )
@@ -119,14 +119,11 @@ def central_plus_coulomb(
 
 def central(
     r,
-    projectile,
     asym_factor,
     isoscalar_params,
     isovector_params,
 ):
     r"""sum of isoscalar and isovector terms, without spin orbit"""
-    Z = projectile[1]
-    asym_factor = (-1) ** (Z + 1)
     return isoscalar(r, *isoscalar_params) + asym_factor * isovector(
         r, *isovector_params
     )
@@ -138,21 +135,24 @@ def calculate_parameters(
     r"""Calculate the parameters in the ELM for a given target isotope
     and energy, given a subparameter sample
     Parameters:
-        A (int): target mass
-        Z (int): target charge
+        projectile (tuple): projectile A,Z - must be neutron or proton ((1,0) or (1,1))
+        target (tuple): target A,Z
         E (float): center-of-mass frame energy
-        E  (float): Fermi energy for A,Z nucleus
+        Ef  (float): Fermi energy for A,Z nucleus
         params (OrderedDict) : subparameter sample
     Returns:
-        isoscalar_params (tuple)
-        isovector_params (tuple)
-        spin_orbit_params (tuple)
-        Coulomb_params (tuple)
-        asym_factor =  (N-Z)/(N+Z)
+        isoscalar_params (tuple): (V0, W0, Wd0, R0, a0, Rd, ad)
+        isovector_params (tuple): (V1, W1, Wd1, R1, a1, Rd1, ad1)
+        spin_orbit_params (tuple): (Vso, rso, aso)
+        Coulomb_params (tuple): (Zz, Rc)
+        asym_factor =  +(-) (N-Z)/(N+Z), for neutrons(protons)
     """
     # asymmetry for isovector dependence
-    A, Z = target
+    A, Z = tuple(target)
+    Ap, Zp = tuple(projectile)
+    assert Ap == 1 and (Zp == 1 or Zp == 0)
     asym_factor = (A - 2 * Z) / (A)
+    asym_factor *= (-1) ** (Zp)
 
     # geometries
     R0 = params["r0"] + params["r0A"] * A ** (1.0 / 3.0)
@@ -162,7 +162,6 @@ def calculate_parameters(
 
     # Coulomb radius equal to isoscalar radius
     RC = R0
-
     # energy
     dE = E - Ef
     if projectile == (1, 1):
@@ -185,8 +184,8 @@ def calculate_parameters(
     Wd1 = params["Wd1"] * erg_wd
 
     return (
-        (V0, W0, Wd0, R0, a0),
-        (V1, W1, Wd1, R1, a1),
+        (V0, W0, Wd0, R0, a0, R0, a0),
+        (V1, W1, Wd1, R1, a1, R1, a1),
         (Vso, R0, a0),
         (Z, RC),
         asym_factor,
@@ -198,3 +197,36 @@ def coulomb_correction(A, Z, RC):
     Coulomb correction for proton energy
     """
     return 6.0 * Z * ALPHA * HBARC / (5 * RC)
+
+
+def calculate_diff_xs(
+    workspace: DifferentialWorkspace,
+    params: OrderedDict,
+):
+    rxn = workspace.reaction
+    kinematics = workspace.kinematics
+    assert rxn.projectile.A == 1
+    (
+        isoscalar_params,
+        isovector_params,
+        spin_orbit_params,
+        coul_params,
+        asym_factor,
+    ) = calculate_parameters(
+        projectile=tuple(rxn.projectile),
+        target=tuple(rxn.target),
+        E=kinematics.Ecm,
+        Ef=rxn.Ef,
+        params=params,
+    )
+    return workspace.xs(
+        interaction_central=central_plus_coulomb,
+        interaction_spin_orbit=spin_orbit,
+        args_central=(
+            asym_factor,
+            isoscalar_params,
+            isovector_params,
+            coul_params,
+        ),
+        args_spin_orbit=spin_orbit_params,
+    )

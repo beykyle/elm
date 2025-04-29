@@ -5,7 +5,7 @@ import numpy as np
 from scipy.stats import multivariate_normal
 
 from exfor_tools.reaction import Reaction
-from exfor_tools.angular_distribution import AngularDistributionSysStatErr
+from exfor_tools.distribution import AngularDistribution
 
 import jitr
 from jitr.xs.elastic import DifferentialWorkspace, ElasticXS
@@ -126,7 +126,7 @@ class ReactionDistribution(Constraint):
     def __init__(
         self,
         quantity: str,
-        measurement: AngularDistributionSysStatErr,
+        measurement: AngularDistribution,
         normalize=None,
         include_sys_norm_err=True,
         include_sys_offset_err=True,
@@ -136,7 +136,7 @@ class ReactionDistribution(Constraint):
         Params:
         quantity : str
             The name of the quantity being measured.
-        measurement : AngularDistributionSysStatErr
+        measurement : AngularDistribution
             An object containing the angular distribution measurements along with
             their statistical and systematic errors.
         normalize : float, optional
@@ -273,9 +273,7 @@ class ElasticModel:
         Returns:
             Elastic cross-section.
         """
-        return model(
-            self.constraint_workspace, model, params, self.constraint_workspace
-        )
+        return model(self.constraint_workspace, params)
 
     def get_xs_vis(
         self,
@@ -289,9 +287,7 @@ class ElasticModel:
         Returns:
             Elastic cross-section.
         """
-        return model(
-            self.constraint_workspace, model, params, self.visualization_workspace
-        )
+        return model(self.visualization_workspace, params)
 
     def get_diff_xs(
         self,
@@ -415,18 +411,12 @@ def set_up_solver(
     tuple
         constraint and visualization workspaces.
     """
-    mass_target = reaction.target.m0
-    mass_projectile = reaction.projectile.m0
-
-    Zproj = reaction.projectile.Z
-    Ztarget = reaction.target.Z
 
     # get kinematics and parameters for this experiment
-    kinematics = jitr.utils.kinematics.semi_relativistic_kinematics(
-        mass_target, mass_projectile, Elab, Zproj * Ztarget
-    )
-    channel_radius_fm = jitr.utils.interaction_range(reaction.projectile.A)
-    a = channel_radius_fm * kinematics.k + 2 * np.pi
+    kinematics = reaction.kinematics(Elab)
+    interaction_range_fm = jitr.utils.interaction_range(reaction.projectile.A)
+    a = interaction_range_fm * kinematics.k + 2 * np.pi
+    channel_radius_fm = a / kinematics.k
     Ns = jitr.utils.suggested_basis_size(a)
     N = core_solver.kernel.quadrature.nbasis
     if Ns > N:
@@ -434,22 +424,13 @@ def set_up_solver(
             f"Suggested basis size for dimensionless channel radius {a} "
             f"is {Ns}, but core_solver only has {N}"
         )
-    sys = jitr.reactions.ProjectileTargetSystem(
-        channel_radius=a,
-        lmax=lmax,
-        mass_target=mass_target,
-        mass_projectile=mass_projectile,
-        Ztarget=Ztarget,
-        Zproj=Zproj,
-        coupling=jitr.reactions.system.spin_half_orbit_coupling,
-    )
 
     integral_ws = jitr.xs.elastic.IntegralWorkspace(
-        projectile=tuple(reaction.projectile),
-        target=tuple(reaction.target),
-        sys=sys,
+        reaction=reaction,
         kinematics=kinematics,
+        channel_radius_fm=channel_radius_fm,
         solver=core_solver,
+        lmax=lmax,
     )
 
     constraint_ws = jitr.xs.elastic.DifferentialWorkspace(
