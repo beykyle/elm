@@ -50,38 +50,47 @@ class Constraint:
             mean=self.y, cov=self.covariance, allow_singular=True
         )
 
-    def residual(self, model, params):
+    def residual(self, ym):
         """
         Calculate the residuals.
-
         Parameters
         ----------
-        params : array-like
-            Parameters for the model.
+        ym : array-like
+            model prediction of y
 
         Returns
         -------
         np.ndarray
             Residuals.
         """
-        return self.y - model(self.x, params)
+        return self.y - ym
 
-    def chi2(self, model, params):
+    def chi2(self, ym: np.array, model_covariance: np.array = None):
         """
         Calculate the generalised chi-squared statistic.
 
         Parameters
         ----------
-        params : array-like
-            Parameters for the model.
+        ym : array-like
+            model prediction of y
+        model_covariance : array-like (defaults to None)
+            model covariance, shape should be (n_data_pts , n_data_pts)
+
 
         Returns
         -------
         float
             Chi-squared statistic.
         """
-        delta = self.residual(model, params)
-        return delta.T @ self.cov_inv @ delta
+        if model_covariance is not None:
+            if model_covariance.shape != (self.n_data_pts, self.n_data_pts):
+                raise ValueError()
+            cov = self.covariance + model_covariance
+            cov_inv = np.linalg.inv(cov)
+        else:
+            cov_inv = self.cov_inv
+        delta = self.residual(ym)
+        return delta.T @ cov_inv @ delta
 
     def num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
         """
@@ -99,10 +108,12 @@ class Constraint:
         """
         return int(np.sum(np.logical_and(self.y >= ylow, self.y < yhigh)))
 
-    def probability_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
+    def expected_num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
         """
-        Returns the probability that self.y falls within ylow and yhigh, for a
-        generalized measure of empirical coverage
+        Returns the number of points multiplied by the probability that self.y
+        falls within ylow and yhigh, for a generalized measure of empirical
+        coverage. This is the expectation value of the number of points in
+        y that fall between ylow and yhigh
 
         Parameters
         ----------
@@ -114,13 +125,14 @@ class Constraint:
         float
         """
         prob = self.dist.cdf(yhigh) - self.dist.cdf(ylow)
-        return prob
+        return prob * self.n_data_pts
 
 
-class ReactionDistribution(Constraint):
+class ReactionConstraint(Constraint):
     """
-    Represents the constraint for a particular reaction observable, calculating the
-    appropriate covariance matrix given statistical and systematic errors.
+    Represents the constraint for a particular reaction observable,
+    calculating the appropriate covariance matrix given statistical
+    and systematic errors.
     """
 
     def __init__(
@@ -137,20 +149,20 @@ class ReactionDistribution(Constraint):
         quantity : str
             The name of the quantity being measured.
         measurement : AngularDistribution
-            An object containing the angular distribution measurements along with
-            their statistical and systematic errors.
+            An object containing the angular distribution measurements along
+            with their statistical and systematic errors.
         normalize : float, optional
-            A value to normalize the measurements and errors. If None, no normalization
-            is applied. Default is None.
+            A value to normalize the measurements and errors. If None, no
+            normalization is applied. Default is None.
         include_sys_norm_err : bool, optional
-            If True, includes systematic normalization error in the covariance matrix.
-            Default is True.
+            If True, includes systematic normalization error in the covariance
+            matrix. Default is True.
         include_sys_offset_err : bool, optional
             If True, includes systematic offset error in the covariance matrix.
             Default is True.
         include_sys_gen_err : bool, optional
-            If True, includes general systematic error in the covariance matrix.
-            Default is True.
+            If True, includes general systematic error in the covariance
+            matrix. Default is True.
 
         """
         self.quantity = quantity
@@ -301,9 +313,9 @@ class ElasticModel:
             model: The model function to be used for calculations.
             params: Parameters for the model.
         Returns:
-            Differential cross-section as a numpy array.
+            Differential cross-section as a numpy array in b/Sr.
         """
-        return self.get_xs_constraint(model, params).dsdo
+        return self.get_xs_constraint(model, params).dsdo / 1000
 
     def get_diff_xs_vis(
         self,
@@ -315,9 +327,9 @@ class ElasticModel:
             model: The model function to be used for calculations.
             params: Parameters for the model.
         Returns:
-            Differential cross-section as a numpy array.
+            Differential cross-section as a numpy array in b/Sr.
         """
-        return self.get_xs_vis(model, params).dsdo
+        return self.get_xs_vis(model, params).dsdo / 1000
 
     def get_Ay(
         self,
