@@ -1,232 +1,169 @@
 from collections import OrderedDict
-from json import load, dumps
-from pathlib import Path
+from typing import Callable
 
-import pandas as pd
 import numpy as np
 
-from jitr.optical_potentials.potential_forms import (
-    thomas_safe,
-    woods_saxon_prime_safe,
-    woods_saxon_safe,
-    coulomb_charged_sphere,
-)
-from jitr.utils.constants import MASS_PION, ALPHA, HBARC
-from jitr.xs.elastic import DifferentialWorkspace
+from exfor_tools.reaction import Reaction
+
+import jitr
+from jitr.xs.elastic import DifferentialWorkspace, ElasticXS
+from jitr import rmatrix
 
 
-class Parameter:
-    def __init__(self, name, dtype, unit, latex_name):
-        self.name = name
-        self.dtype = dtype
-        self.unit = unit
-        self.latex_name = latex_name
-
-
-params = [
-    Parameter("V0", np.float64, r"MeV", r"V_0"),
-    Parameter("W0", np.float64, r"MeV", r"W_0"),
-    Parameter("Wd0", np.float64, r"MeV", r"W_{D0}"),
-    Parameter("V1", np.float64, r"MeV", r"V_1"),
-    Parameter("W1", np.float64, r"MeV", r"W_1"),
-    Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
-    #   Parameter("Vso", np.float64, r"MeV", r"V_{so}"),
-    Parameter("alpha", np.float64, r"MeV$^{-1}$", r"\alpha"),
-    #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
-    Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
-    Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
-    Parameter("r0", np.float64, r"fm", r"r_0"),
-    Parameter("r1", np.float64, r"fm", r"r_1"),
-    Parameter("r0A", np.float64, r"fm", r"r_{0A}"),
-    Parameter("r1A", np.float64, r"fm", r"r_{1A}"),
-    Parameter("a0", np.float64, r"fm", r"a_0"),
-    Parameter("a1", np.float64, r"fm", r"a_1"),
-]
-params_dtype = [(p.name, p.dtype) for p in params]
-NUM_PARAMS = len(params)
-
-
-def dump_sample_to_json(fpath: Path, sample: OrderedDict):
-    with open(fpath, "w") as file:
-        file.write(dumps(dict(sample), indent=4))
-
-
-def read_sample_from_json(fpath: Path):
-    try:
-        with open(fpath, "r") as file:
-            return load(file, object_pairs_hook=OrderedDict)
-    except IOError:
-        raise f"Error: failed to open {fpath}"
-
-
-def array_to_list(samples: np.ndarray):
-    return [
-        OrderedDict([(key, entry[key]) for key in params_dtype.names])
-        for entry in samples
-    ]
-
-
-def list_to_array(samples: list):
-    return np.array([(sample.values()) for sample in samples], dtype=params_dtype)
-
-
-def list_to_dataframe(samples: list):
-    return pd.DataFrame(samples)
-
-
-def dataframe_to_list(samples: pd.DataFrame):
-    return samples.to_dict(orient="records", into=OrderedDict)
-
-
-def dump_samples_to_numpy(fpath: Path, samples: list):
-    list_to_array(samples).save(fpath)
-
-
-def read_samples_from_numpy(fpath: Path):
-    return array_to_list(np.load(fpath))
-
-
-def isoscalar(r, V0, W0, Wd0, R0, a0, Rd, ad):
-    r"""isoscalar part (without spin-orbit) as a function of radial distance r"""
-    return -(V0 + 1j * W0) * woods_saxon_safe(r, R0, a0) + (
-        4j * a0 * Wd0
-    ) * woods_saxon_prime_safe(r, Rd, ad)
-
-
-def isovector(r, V1, W1, Wd1, R1, a1, Rd1, ad1):
-    r"""isovector part (without spin-orbit) as a function of radial distance r"""
-    return -(V1 + 1j * W1) * woods_saxon_safe(r, R1, a1) + (
-        4j * a1 * Wd1
-    ) * woods_saxon_prime_safe(r, Rd1, ad1)
-
-
-def spin_orbit(r, Vso, R0, a0):
-    r"""spin-orbit term"""
-    return Vso / MASS_PION**2 * thomas_safe(r, R0, a0)
-
-
-def central_plus_coulomb(
-    r, asym_factor, isoscalar_params, isovector_params, coulomb_params
-):
-    r"""sum of coulomb, isoscalar and isovector terms, without spin orbit"""
-    Z, Rc = coulomb_params
-    coul = coulomb_charged_sphere(r, *coulomb_params)
-    nucl = isoscalar(r, *isoscalar_params) + asym_factor * isovector(
-        r, *isovector_params
-    )
-    return nucl + coul
-
-
-def central(
-    r,
-    asym_factor,
-    isoscalar_params,
-    isovector_params,
-):
-    r"""sum of isoscalar and isovector terms, without spin orbit"""
-    return isoscalar(r, *isoscalar_params) + asym_factor * isovector(
-        r, *isovector_params
-    )
-
-
-def calculate_parameters(
-    projectile: tuple, target: tuple, E: float, Ef: float, params: OrderedDict
-):
-    r"""Calculate the parameters in the ELM for a given target isotope
-    and energy, given a subparameter sample
-    Parameters:
-        projectile (tuple): projectile A,Z - must be neutron or proton ((1,0) or (1,1))
-        target (tuple): target A,Z
-        E (float): center-of-mass frame energy
-        Ef  (float): Fermi energy for A,Z nucleus
-        params (OrderedDict) : subparameter sample
-    Returns:
-        isoscalar_params (tuple): (V0, W0, Wd0, R0, a0, Rd, ad)
-        isovector_params (tuple): (V1, W1, Wd1, R1, a1, Rd1, ad1)
-        spin_orbit_params (tuple): (Vso, rso, aso)
-        Coulomb_params (tuple): (Zz, Rc)
-        asym_factor =  +(-) (N-Z)/(N+Z), for neutrons(protons)
+class Model:
     """
-    # asymmetry for isovector dependence
-    A, Z = target
-    Ap, Zp = projectile
-    assert Ap == 1 and (Zp == 1 or Zp == 0)
-    asym_factor = (A - 2 * Z) / (A)
-    asym_factor *= (-1) ** (Zp)
-
-    # geometries
-    R0 = params["r0"] + params["r0A"] * A ** (1.0 / 3.0)
-    R1 = params["r1"] + params["r1A"] * A ** (1.0 / 3.0)
-    a0 = params["a0"]
-    a1 = params["a1"]
-
-    # Coulomb radius equal to isoscalar radius
-    RC = R0
-    # energy
-    dE = E - Ef
-    if projectile == (1, 1):
-        dE -= coulomb_correction(A, Z, RC)
-
-    # energy dependence of depths
-    erg_v = 1.0 + params["alpha"] * dE  # + params["beta"] * dE**2
-    erg_w = dE**2 / (dE**2 + params["gamma_w"] ** 2)
-    erg_wd = dE**2 / (dE**2 + params["gamma_d"] ** 2)
-
-    # isoscalar depths
-    V0 = params["V0"] * erg_v
-    W0 = params["W0"] * erg_w
-    Wd0 = params["Wd0"] * erg_wd
-    Vso = 5.58  # params["Vso"]
-
-    # isovector depths
-    V1 = params["V1"] * erg_v
-    W1 = params["W1"] * erg_w
-    Wd1 = params["Wd1"] * erg_wd
-
-    return (
-        (V0, W0, Wd0, R0, a0, R0, a0),
-        (V1, W1, Wd1, R1, a1, R1, a1),
-        (Vso, R0, a0),
-        (Z, RC),
-        asym_factor,
-    )
-
-
-def coulomb_correction(A, Z, RC):
-    r"""
-    Coulomb correction for proton energy
+    Represents an arbitrary parameteric model
     """
-    return 6.0 * Z * ALPHA * HBARC / (5 * RC)
+
+    def __init__(self, x: np.ndarray):
+        self.x = x
+
+    def __call__(self, params: OrderedDict):
+        pass
 
 
-def calculate_diff_xs(
-    workspace: DifferentialWorkspace,
-    params: OrderedDict,
+class ElasticModel(Model):
+    """
+    Encapsulates any reaction model for differential elastic quantities using a
+    jitr.xs.elastic.DifferentialWorkspace.
+    """
+
+    def __init__(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        quantity: str,
+        reaction: Reaction,
+        Elab: float,
+        angles_rad_vis: np.ndarray,
+        angles_rad_constraint: np.ndarray,
+        lmax: int = 20,
+    ):
+        """
+        Params:
+            model: A callable that takes in a DifferentialWorkspace and an
+                OrderedDict of params and spits out the corresponding ElasticXS
+            quantity: The type of quantity to be calculated (e.g., "dXS/dA",
+                "dXS/dRuth", "Ay").
+            reaction: The reaction object containing details of the reaction.
+            Elab: The laboratory energy.
+            angles_rad_vis: Array of angles in radians for visualization.
+            angles_rad_constraint: Array of angles in radians corresponding to
+                experimentally measured constraints.
+            core_solver: The core solver used for calculations.
+            lmax: Maximum angular momentum, defaults to 20.
+        """
+        self.quantity = quantity
+        self.reaction = reaction
+
+        check_angle_grid(angles_rad_vis, "angles_rad_vis")
+        check_angle_grid(angles_rad_constraint, "angles_rad_constraint")
+
+        super().__init__(angles_rad_constraint)
+
+        constraint_ws, visualization_ws, kinematics = set_up_solver(
+            reaction,
+            Elab,
+            angles_rad_constraint,
+            angles_rad_vis,
+            core_solver,
+            lmax,
+        )
+        self.constraint_workspace = constraint_ws
+        self.visualization_workspace = visualization_ws
+        self.kinematics = kinematics
+        self.Elab = Elab
+        self.model = model
+        self.quantity_extractor = get_quantity_extractor(self.quantity)
+
+        super().__init__(self.model.x)
+
+    def get_model_xs(self, params: OrderedDict) -> ElasticXS:
+        return self.model(self.constraint_workspace, params)
+
+    def get_model_xs_visualization(self, params: OrderedDict) -> ElasticXS:
+        return self.model(self.visualization_workspace, params)
+
+    def __call__(self, params: OrderedDict) -> np.ndarray:
+        """
+        Params:
+            model: The model function to be used for calculations.
+            params: Parameters for the model.
+        Returns:
+            Calculated quantity as a numpy array (same shape as
+                angle_rad_constraint).
+        """
+        xs = self.get_model_xs(params)
+        return self.quantity_extractor(xs, self.constraint_workspace)
+
+
+def get_quantity_extractor(quantity: str):
+    if quantity == "dXS/dA":
+        return lambda xs, ws: xs.dsdo
+    elif quantity == "dXS/dRuth":
+        return lambda xs, ws: xs.dsdo / ws.rutherford
+    elif quantity == "Ay":
+        return lambda xs, ws: xs.Ay
+    else:
+        raise ValueError(f"Unknown quantity {quantity}")
+
+
+def set_up_solver(
+    reaction: Reaction,
+    Elab: float,
+    angle_rad_constraint: np.array,
+    angle_rad_vis: np.array,
+    lmax: int,
 ):
-    rxn = workspace.reaction
-    kinematics = workspace.kinematics
-    assert rxn.projectile.A == 1
-    (
-        isoscalar_params,
-        isovector_params,
-        spin_orbit_params,
-        coul_params,
-        asym_factor,
-    ) = calculate_parameters(
-        projectile=tuple(rxn.projectile),
-        target=tuple(rxn.target),
-        E=kinematics.Ecm,
-        Ef=rxn.Ef,
-        params=params,
+    """
+    Set up the solver for the reaction.
+
+    Parameters
+    ----------
+    reaction : exfor_tools.Reaction
+        Reaction information.
+    Elab : float
+        Laboratory energy.
+    angle_rad_constraint : np.array
+        Angles to compare to experiment (rad).
+    angle_rad_vis : np.array
+        Angles to visualize on (rad)
+    lmax : int
+        Maximum angular momentum.
+
+    Returns
+    -------
+    tuple
+        constraint and visualization workspaces.
+    """
+
+    # get kinematics and parameters for this experiment
+    kinematics = reaction.kinematics(Elab)
+    interaction_range_fm = jitr.utils.interaction_range(reaction.projectile.A)
+    a = interaction_range_fm * kinematics.k + 2 * np.pi
+    channel_radius_fm = a / kinematics.k
+    Ns = jitr.utils.suggested_basis_size(a)
+    core_solver = rmatrix.Solver(Ns)
+
+    integral_ws = jitr.xs.elastic.IntegralWorkspace(
+        reaction=reaction,
+        kinematics=kinematics,
+        channel_radius_fm=channel_radius_fm,
+        solver=core_solver,
+        lmax=lmax,
     )
-    return workspace.xs(
-        interaction_central=central_plus_coulomb,
-        interaction_spin_orbit=spin_orbit,
-        args_central=(
-            asym_factor,
-            isoscalar_params,
-            isovector_params,
-            coul_params,
-        ),
-        args_spin_orbit=spin_orbit_params,
+
+    constraint_ws = jitr.xs.elastic.DifferentialWorkspace(
+        integral_workspace=integral_ws, angles=angle_rad_constraint
     )
+    visualization_ws = jitr.xs.elastic.DifferentialWorkspace(
+        integral_workspace=integral_ws, angles=angle_rad_vis
+    )
+
+    return constraint_ws, visualization_ws, kinematics
+
+
+def check_angle_grid(angles_rad: np.ndarray, name: str):
+    if len(angles_rad.shape) > 1:
+        raise ValueError(f"{name} must be 1D, is {len(angles_rad.shape)}D")
+    if angles_rad[0] < 0 or angles_rad[-1] > np.pi:
+        raise ValueError(f"{name} must be on [0,pi)")
