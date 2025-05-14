@@ -134,23 +134,27 @@ def build_workspaces_from_data(
     angles_vis=None,
     lmax=30,
 ):
-    ## TODO handle the fact that we want rutherford workspaces for pp, and we want to
-    ## get them from abs measurements
-    ## also remove duplicates
     angles_vis = angles_vis if angles_vis is not None else np.linspace(0.01, 180, 90)
-    workspaces = []
+    measurements = []
     for target, data_set in data.items():
         for entry_id, entry in data_set.data[quantity].entries.items():
             for measurement in entry.measurements:
-                workspace = ElasticWorkspace(
-                    quantity=quantity,
-                    reaction=entry.reaction,
-                    Elab=measurement.Einc,
-                    angles_rad_constraint=measurement.x * np.pi / 180,
-                    angles_rad_vis=angles_vis * np.pi / 180,
-                    lmax=lmax,
-                )
-                workspaces.append((measurement, workspace))
+                measurements.append((entry.reaction, measurement))
+
+    # sort by energy
+    # measurements.sort(key=lambda m: m[1].Einc, reverse=True)
+
+    workspaces = []
+    for reaction, measurement in measurements:
+        workspace = ElasticWorkspace(
+            quantity=quantity,
+            reaction=reaction,
+            Elab=measurement.Einc,
+            angles_rad_constraint=measurement.x * np.pi / 180,
+            angles_rad_vis=angles_vis * np.pi / 180,
+            lmax=lmax,
+        )
+        workspaces.append((measurement, workspace))
     return workspaces
 
 
@@ -200,9 +204,9 @@ class ElasticAngularCorpus(Corpus):
 
         for measurement, workspace in workspaces:
             if self.quantity == "dXS/dRuth" and measurement.quantity == "dXS/dA":
-                norm = workspace.constraint_workspace.rutherford
+                norm = workspace.constraint_workspace.rutherford / 1000
             elif self.quantity == "dXS/dA" and measurement.quantity == "dXS/dRuth":
-                norm = 1.0 / workspace.constraint_workspace.rutherford
+                norm = 1000.0 / workspace.constraint_workspace.rutherford
             else:
                 norm = None
             constraints.append(
