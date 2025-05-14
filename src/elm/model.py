@@ -10,6 +10,9 @@ from jitr.xs.elastic import DifferentialWorkspace, ElasticXS
 from jitr import rmatrix
 
 
+DEFAULT_LMAX = 20
+
+
 class Model:
     """
     Represents an arbitrary parameteric model
@@ -22,21 +25,36 @@ class Model:
         pass
 
 
-class ElasticModel(Model):
+def extract_dXS_dA(xs: ElasticXS, ws: DifferentialWorkspace) -> np.ndarray:
+    """Extracts dXS/dA in b/Sr"""
+    return xs.dsdo / 1000
+
+
+def extract_dXS_dRuth(xs: ElasticXS, ws: DifferentialWorkspace) -> np.ndarray:
+    """Extracts dXS/dRuth"""
+    return xs.dsdo / ws.rutherford
+
+
+def extract_Ay(xs: ElasticXS, ws: DifferentialWorkspace) -> np.ndarray:
+    """Extracts Ay"""
+    return xs.Ay
+
+
+class ElasticWorkspace:
     """
-    Encapsulates any reaction model for differential elastic quantities using a
-    jitr.xs.elastic.DifferentialWorkspace.
+    Encapsulates two `DifferentialWorkspace`s, one on a shared angular grid
+    with a measured angular distribution and one on a (typically finer)
+    grid for visualization
     """
 
     def __init__(
         self,
-        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         quantity: str,
         reaction: Reaction,
         Elab: float,
         angles_rad_vis: np.ndarray,
         angles_rad_constraint: np.ndarray,
-        lmax: int = 20,
+        lmax: int = DEFAULT_LMAX,
     ):
         """
         Params:
@@ -49,39 +67,53 @@ class ElasticModel(Model):
             angles_rad_vis: Array of angles in radians for visualization.
             angles_rad_constraint: Array of angles in radians corresponding to
                 experimentally measured constraints.
-            core_solver: The core solver used for calculations.
             lmax: Maximum angular momentum, defaults to 20.
         """
+        if Elab <= 0:
+            raise ValueError("Elab must be positive.")
+
         self.quantity = quantity
         self.reaction = reaction
 
         check_angle_grid(angles_rad_vis, "angles_rad_vis")
         check_angle_grid(angles_rad_constraint, "angles_rad_constraint")
 
-        super().__init__(angles_rad_constraint)
-
-        constraint_ws, visualization_ws, kinematics = set_up_solver(
-            reaction,
-            Elab,
-            angles_rad_constraint,
-            angles_rad_vis,
-            core_solver,
-            lmax,
+        self.constraint_workspace, self.visualization_workspace, self.kinematics = (
+            set_up_solver(
+                reaction,
+                Elab,
+                angles_rad_constraint,
+                angles_rad_vis,
+                lmax,
+            )
         )
-        self.constraint_workspace = constraint_ws
-        self.visualization_workspace = visualization_ws
-        self.kinematics = kinematics
         self.Elab = Elab
+        self.quantity_extractor = self.get_quantity_extractor(quantity)
+
+    @staticmethod
+    def get_quantity_extractor(
+        quantity: str,
+    ) -> Callable[[ElasticXS, DifferentialWorkspace], np.ndarray]:
+        """Returns the appropriate quantity extraction function."""
+        if quantity == "dXS/dA":
+            return extract_dXS_dA
+        elif quantity == "dXS/dRuth":
+            return extract_dXS_dRuth
+        elif quantity == "Ay":
+            return extract_Ay
+        else:
+            raise ValueError(f"Unknown quantity {quantity}")
+
+
+class ElasticModel(Model):
+    def __init__(
+        self,
+        workspace: ElasticWorkspace,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+    ):
+        self.workspace = workspace
         self.model = model
-        self.quantity_extractor = get_quantity_extractor(self.quantity)
-
-        super().__init__(self.model.x)
-
-    def get_model_xs(self, params: OrderedDict) -> ElasticXS:
-        return self.model(self.constraint_workspace, params)
-
-    def get_model_xs_visualization(self, params: OrderedDict) -> ElasticXS:
-        return self.model(self.visualization_workspace, params)
+        super().__init__(self.workspace.constraint_workspace.angles)
 
     def __call__(self, params: OrderedDict) -> np.ndarray:
         """
@@ -93,18 +125,15 @@ class ElasticModel(Model):
                 angle_rad_constraint).
         """
         xs = self.get_model_xs(params)
-        return self.quantity_extractor(xs, self.constraint_workspace)
+        return self.workspace.quantity_extractor(
+            xs, self.workspace.constraint_workspace
+        )
 
+    def get_model_xs(self, params: dict) -> ElasticXS:
+        return self.model(self.workspace.constraint_workspace, params)
 
-def get_quantity_extractor(quantity: str):
-    if quantity == "dXS/dA":
-        return lambda xs, ws: xs.dsdo
-    elif quantity == "dXS/dRuth":
-        return lambda xs, ws: xs.dsdo / ws.rutherford
-    elif quantity == "Ay":
-        return lambda xs, ws: xs.Ay
-    else:
-        raise ValueError(f"Unknown quantity {quantity}")
+    def get_model_xs_visualization(self, params: dict) -> ElasticXS:
+        return self.model(self.workspace.visualization_workspace, params)
 
 
 def set_up_solver(

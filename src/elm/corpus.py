@@ -1,14 +1,21 @@
 from collections import OrderedDict
+from typing import Callable
+
 import numpy as np
+
+from exfor_tools.curate import MulltiQuantityReactionData
 from exfor_tools.distribution import AngularDistribution
 from exfor_tools.reaction import Reaction
+
+from jitr.xs.elastic import DifferentialWorkspace, ElasticXS
+
 from .constraint import Constraint, ReactionConstraint
-from .model import ElasticModel
+from .model import ElasticModel, ElasticWorkspace
 
 
 class Corpus:
     """
-    A class to represent a collection of constraints.
+    A class to represent a generic collection of constraints.
 
     Attributes
     ----------
@@ -30,11 +37,20 @@ class Corpus:
     empirical_coverage(ylow, yhigh, method='count')
         Computes the empirical coverage within the given interval.
     """
-    def __init__(self, constraints: list[Constraint]):
+
+    def __init__(self, constraints: list[Constraint], weights: np.ndarray = None):
         self.constraints = constraints
         self.y = np.hstack([constraint.y for constraint in self.constraints])
         self.x = np.hstack([constraint.x for constraint in self.constraints])
         self.n_data_pts = self.y.size
+
+        if weights is None:
+            weights = np.ones((len(self.constraints),), dtype=float)
+        elif weights.shape != (len(self.constraints),):
+            raise ValueError(
+                "weights must be a 1D array with the same shape as constraints"
+            )
+        self.weights = weights
 
     def residual(self, params: OrderedDict):
         """
@@ -56,7 +72,7 @@ class Corpus:
 
     def chi2(self, params: OrderedDict):
         """
-        Compute the chi-squared value for the given parameters.
+        Compute the weighted chi-squared value for the given parameters.
 
         Parameters
         ----------
@@ -68,7 +84,10 @@ class Corpus:
         float
             Chi-squared value for the given parameters.
         """
-        return sum(constraint.chi2(params) for constraint in self.constraints)
+        return sum(
+            constraint.chi2(params)
+            for weight, constraint in zip(self.weights, self.constraints)
+        )
 
     def empirical_coverage(
         self, ylow: np.ndarray, yhigh: np.ndarray, method: str = "count"
@@ -92,16 +111,47 @@ class Corpus:
             Empirical coverage within the given interval.
         """
         if method == "count":
-            return sum(
-                constraint.num_pts_within_interval(ylow, yhigh) / constraint.n_data_pts
-                for constraint in self.constraints
+            return (
+                sum(
+                    constraint.num_pts_within_interval(ylow, yhigh)
+                    for constraint in self.constraints
+                )
+                / self.n_data_pts
             )
         elif method == "average":
-            return sum(
-                constraint.expected_num_pts_within_interval(ylow, yhigh)
-                / constraint.n_data_pts
-                for constraint in self.constraints
+            return (
+                sum(
+                    constraint.expected_num_pts_within_interval(ylow, yhigh)
+                    for constraint in self.constraints
+                )
+                / self.n_data_pts
             )
+
+
+def build_workspaces_from_data(
+    quantity: str,
+    data: dict[tuple[int, int], MulltiQuantityReactionData],
+    angles_vis=None,
+    lmax=30,
+):
+    ## TODO handle the fact that we want rutherford workspaces for pp, and we want to
+    ## get them from abs measurements
+    ## also remove duplicates
+    angles_vis = angles_vis if angles_vis is not None else np.linspace(0.01, 180, 90)
+    workspaces = []
+    for target, data_set in data.items():
+        for entry_id, entry in data_set.data[quantity].entries.items():
+            for measurement in entry.measurements:
+                workspace = ElasticWorkspace(
+                    quantity=quantity,
+                    reaction=entry.reaction,
+                    Elab=measurement.Einc,
+                    angles_rad_constraint=measurement.x * np.pi / 180,
+                    angles_rad_vis=angles_vis * np.pi / 180,
+                    lmax=lmax,
+                )
+                workspaces.append((measurement, workspace))
+    return workspaces
 
 
 class ElasticAngularCorpus(Corpus):
@@ -119,64 +169,49 @@ class ElasticAngularCorpus(Corpus):
     constraints : list of ReactionConstraint
         A list of reaction constraints.
     """
+
     def __init__(
         self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         quantity: str,
-        measurements: list[AngularDistribution],
-        reactions: list[Reaction],
-        angles_vis=None,
+        workspaces: list[tuple[AngularDistribution, ElasticWorkspace]],
+        weights=None,
         constraint_kwargs=None,
-        lmax=30,
     ):
         """
-        Initialize an ElasticAngularCorpus instance from a list of measured
-        AngularDistributions and corresponding Reactions
+        Initialize an `ElasticAngularCorpus` instance from a list of measured
+        `AngularDistribution`s and corresponding `Reaction`s, along with the
+        corresponding `ElasticWorkspace`s
 
         Parameters
         ----------
         quantity : str
             The quantity to be measured.
-        measurements : list of AngularDistribution
-            A list of angular distribution measurements.
-        reactions : list of Reaction
-            A list of reactions.
-        angles_vis : list, optional
-            Angles for visualization. Defaults to None.
+        workspaces : list[tuple[AngularDistribution, ElasticWorkspace]]
+            A list of tuples containing a reaction and corresponding measured
+            angular distribution of given quantity.
         constraint_kwargs : dict, optional
-            Additional keyword arguments for constraints. Defaults to None.
-        lmax : int, optional
-            Maximum angular momentum. Defaults to 30.
+            Additional keyword arguments for constraints. Defaults to `None`.
         """
-        self.quantity = quantity
-        self.angles_vis = (
-            angles_vis if angles_vis is not None else np.linspace(0.01, 180, 90)
-        )
-        self.lmax = lmax
         constraint_kwargs = constraint_kwargs or {}
         constraints = []
-        for measurement, reaction in zip(measurements, reactions):
 
-            model = ElasticModel(
-                quantity=self.quantity,
-                reaction=reaction,
-                Elab=measurement.Einc,
-                angles_rad_constraint=measurement.x * np.pi / 180,
-                angles_rad_vis=angles_vis * np.pi / 180,
-                lmax=30,
-            )
+        self.quantity = quantity
 
+        for measurement, workspace in workspaces:
             if self.quantity == "dXS/dRuth" and measurement.quantity == "dXS/dA":
-                norm = model.constraint_workspace.rutherford
+                norm = workspace.constraint_workspace.rutherford
+            elif self.quantity == "dXS/dA" and measurement.quantity == "dXS/dRuth":
+                norm = 1.0 / workspace.constraint_workspace.rutherford
             else:
                 norm = None
-
             constraints.append(
                 ReactionConstraint(
-                    self.quantity,
-                    measurement,
-                    model,
+                    quantity=self.quantity,
+                    measurement=measurement,
+                    model=ElasticModel(workspace, model),
                     normalize=norm,
                     **constraint_kwargs,
                 )
             )
-        super().__init__(constraints)
+        super().__init__(constraints, weights)
