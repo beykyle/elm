@@ -167,9 +167,10 @@ def set_up_solver(
 
     # get kinematics and parameters for this experiment
     kinematics = reaction.kinematics(Elab)
-    interaction_range_fm = jitr.utils.interaction_range(reaction.projectile.A)
+    interaction_range_fm = jitr.utils.interaction_range(reaction.target.A)
     a = interaction_range_fm * kinematics.k + 2 * np.pi
     channel_radius_fm = a / kinematics.k
+    # Ns = max(30,jitr.utils.suggested_basis_size(a))
     Ns = jitr.utils.suggested_basis_size(a)
     core_solver = rmatrix.Solver(Ns)
 

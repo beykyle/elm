@@ -133,16 +133,18 @@ def build_workspaces_from_data(
     data: dict[tuple[int, int], MulltiQuantityReactionData],
     angles_vis=None,
     lmax=30,
+    allowed_measurement_quantities=None,
 ):
+    if allowed_measurement_quantities is None:
+        allowed_measurement_quantities = [quantity]
+
     angles_vis = angles_vis if angles_vis is not None else np.linspace(0.01, 180, 90)
     measurements = []
     for target, data_set in data.items():
-        for entry_id, entry in data_set.data[quantity].entries.items():
-            for measurement in entry.measurements:
-                measurements.append((entry.reaction, measurement))
-
-    # sort by energy
-    # measurements.sort(key=lambda m: m[1].Einc, reverse=True)
+        for q in allowed_measurement_quantities:
+            for entry_id, entry in data_set.data[q].entries.items():
+                for measurement in entry.measurements:
+                    measurements.append((entry.reaction, measurement))
 
     workspaces = []
     for reaction, measurement in measurements:
