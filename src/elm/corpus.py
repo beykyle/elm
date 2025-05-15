@@ -168,7 +168,8 @@ class ElasticAngularCorpus(Corpus):
         self,
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         quantity: str,
-        workspaces: list[tuple[AngularDistribution, ElasticWorkspace]],
+        workspaces: list[ElasticWorkspace],
+        measurements: list[tuple[Reaction, AngularDistribution]],
         weights=None,
         constraint_kwargs=None,
     ):
@@ -191,8 +192,24 @@ class ElasticAngularCorpus(Corpus):
         constraints = []
 
         self.quantity = quantity
+        self.measurements = measurements
 
-        for measurement, workspace in workspaces:
+        for (reaction, measurement), workspace in zip(measurements, workspaces):
+            if (
+                workspace.kinematics.Elab != measurement.Einc
+                or workspace.reaction != reaction
+                or not np.allclose(
+                    workspace.constraint_workspace.angles, measurement.x * np.pi / 180
+                )
+            ):
+                raise ValueError(
+                    f"mismatch between workspace and measurement for subentry {measurement.subentry}."
+                    "\n          workspace | measuremnt  "
+                    "\n ======================================================"
+                    f"\n Energy:      {workspace.kinematics.Elab} | {measurement.Einc}"
+                    f"\n Reacttion:   {workspace.reaction} |  {reaction}"
+                    f"\n Same angles: {np.allclose(workspace.constraint_workspace.angles, measurement.x * np.pi / 180)})"
+                )
             if self.quantity == "dXS/dRuth" and measurement.quantity == "dXS/dA":
                 norm = workspace.constraint_workspace.rutherford / 1000
             elif self.quantity == "dXS/dA" and measurement.quantity == "dXS/dRuth":
