@@ -3,7 +3,6 @@ from typing import Callable
 
 import numpy as np
 
-from exfor_tools.curate import MulltiQuantityReactionData
 from exfor_tools.distribution import AngularDistribution
 from exfor_tools.reaction import Reaction
 
@@ -128,24 +127,13 @@ class Corpus:
             )
 
 
-def build_workspaces_from_data(
+def build_workspaces_from_measurements(
     quantity: str,
-    data: dict[tuple[int, int], MulltiQuantityReactionData],
+    measurements: list[tuple[Reaction, AngularDistribution]],
     angles_vis=None,
     lmax=30,
-    allowed_measurement_quantities=None,
 ):
-    if allowed_measurement_quantities is None:
-        allowed_measurement_quantities = [quantity]
-
     angles_vis = angles_vis if angles_vis is not None else np.linspace(0.01, 180, 90)
-    measurements = []
-    for target, data_set in data.items():
-        for q in allowed_measurement_quantities:
-            for entry_id, entry in data_set.data[q].entries.items():
-                for measurement in entry.measurements:
-                    measurements.append((entry.reaction, measurement))
-
     workspaces = []
     for reaction, measurement in measurements:
         workspace = ElasticWorkspace(
@@ -156,7 +144,7 @@ def build_workspaces_from_data(
             angles_rad_vis=angles_vis * np.pi / 180,
             lmax=lmax,
         )
-        workspaces.append((measurement, workspace))
+        workspaces.append(workspace)
     return workspaces
 
 

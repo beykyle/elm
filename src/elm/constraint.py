@@ -179,6 +179,7 @@ class ReactionConstraint(Constraint):
             y /= normalize
             stat_err_y /= normalize
             sys_err_general /= normalize
+            ## TODO something probably went wrong here or in the general covariance
             if sys_err_offset > 0:
                 sys_err_general += sys_err_offset * np.ones_like(x) / normalize
                 sys_err_offset = 0
