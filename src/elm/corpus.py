@@ -237,6 +237,7 @@ class ElasticAngularCorpus(Corpus):
                 norm = 1000.0 / workspace.constraint_workspace.rutherford
             else:
                 norm = None
+
             constraints.append(
                 ReactionConstraint(
                     quantity=self.quantity,
