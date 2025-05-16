@@ -26,6 +26,10 @@ class Corpus:
         Combined x values from all constraints.
     n_data_pts : int
         Total number of data points.
+    nparams : int
+        Total number of free parameters in the model.
+    model_name : str
+        name or label for the model
 
     Methods
     -------
@@ -37,11 +41,24 @@ class Corpus:
         Computes the empirical coverage within the given interval.
     """
 
-    def __init__(self, constraints: list[Constraint], weights: np.ndarray = None):
+    def __init__(
+        self,
+        constraints: list[Constraint],
+        n_params: int,
+        model_name: str,
+        weights: np.ndarray = None,
+    ):
         self.constraints = constraints
+        self.n_params = n_params
+        self.model_name = model_name
         self.y = np.hstack([constraint.y for constraint in self.constraints])
         self.x = np.hstack([constraint.x for constraint in self.constraints])
         self.n_data_pts = self.y.size
+        self.n_dof = self.n_data_pts - self.n_params
+        if self.n_dof < 0:
+            raise ValueError(
+                f"Model under-constrained! {self.n_params} free parameters and {self.n_data_pts} data points"
+            )
 
         if weights is None:
             weights = np.ones((len(self.constraints),), dtype=float)
@@ -167,11 +184,13 @@ class ElasticAngularCorpus(Corpus):
     def __init__(
         self,
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        model_name: str,
+        n_params: int,
         quantity: str,
         workspaces: list[ElasticWorkspace],
         measurements: list[tuple[Reaction, AngularDistribution]],
         weights=None,
-        constraint_kwargs=None,
+        **constraint_kwargs,
     ):
         """
         Initialize an `ElasticAngularCorpus` instance from a list of measured
@@ -182,6 +201,8 @@ class ElasticAngularCorpus(Corpus):
         ----------
         quantity : str
             The quantity to be measured.
+        nparams : int
+            Total number of free parameters in the model.
         workspaces : list[tuple[AngularDistribution, ElasticWorkspace]]
             A list of tuples containing a reaction and corresponding measured
             angular distribution of given quantity.
@@ -225,4 +246,4 @@ class ElasticAngularCorpus(Corpus):
                     **constraint_kwargs,
                 )
             )
-        super().__init__(constraints, weights)
+        super().__init__(constraints, n_params, model_name, weights)
