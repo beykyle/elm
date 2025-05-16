@@ -247,3 +247,20 @@ class ElasticAngularCorpus(Corpus):
                 )
             )
         super().__init__(constraints, n_params, model_name, weights)
+
+    def set_model(
+        self,
+        model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
+        **constraint_kwargs,
+    ):
+        """
+        keeping the same measurements (and their corresponding workspaces), reset
+        constraints to use a new model
+        """
+        for i in range(len(self.constraints)):
+            self.constraints[i] = ReactionConstraint(
+                quantity=self.quantity,
+                measurement=self.measurements[i],
+                model=ElasticModel(self.constraints[i].workspace, model),
+                **constraint_kwargs,
+            )
