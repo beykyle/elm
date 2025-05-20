@@ -60,10 +60,7 @@ def read_sample_from_json(fpath: Path):
 
 
 def array_to_list(samples: np.ndarray):
-    return [
-        OrderedDict(zip([p.name for p in params], entry))
-        for entry in samples
-    ]
+    return [OrderedDict(zip([p.name for p in params], entry)) for entry in samples]
 
 
 def list_to_array(samples: list):
