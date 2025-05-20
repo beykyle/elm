@@ -61,7 +61,7 @@ def read_sample_from_json(fpath: Path):
 
 def array_to_list(samples: np.ndarray):
     return [
-        OrderedDict([(key, entry[key]) for key in params_dtype.names])
+        OrderedDict(zip([p.name for p in params], entry))
         for entry in samples
     ]
 
@@ -86,18 +86,18 @@ def read_samples_from_numpy(fpath: Path):
     return array_to_list(np.load(fpath))
 
 
-def isoscalar(r, V0, W0, Wd0, R0, a0, Rd, ad):
+def isoscalar(r, V0, W0, Wd0, R0, a0, Rd0, ad0):
     r"""isoscalar part (without spin-orbit) as a function of radial distance r"""
-    return -(V0 + 1j * W0) * woods_saxon_safe(r, R0, a0) + (
-        4j * a0 * Wd0
-    ) * woods_saxon_prime_safe(r, Rd, ad)
+    volume = -(V0 + 0j * W0) * woods_saxon_safe(r, R0, a0)
+    surface = (4j * a0 * Wd0) * woods_saxon_prime_safe(r, Rd0, ad0)
+    return volume + surface
 
 
 def isovector(r, V1, W1, Wd1, R1, a1, Rd1, ad1):
     r"""isovector part (without spin-orbit) as a function of radial distance r"""
-    return -(V1 + 1j * W1) * woods_saxon_safe(r, R1, a1) + (
-        4j * a1 * Wd1
-    ) * woods_saxon_prime_safe(r, Rd1, ad1)
+    volume = -(V1 + 1j * W1) * woods_saxon_safe(r, R1, a1)
+    surface = (4j * a1 * Wd1) * woods_saxon_prime_safe(r, Rd1, ad1)
+    return volume + surface
 
 
 def spin_orbit(r, Vso, R0, a0):
@@ -109,12 +109,9 @@ def central_plus_coulomb(
     r, asym_factor, isoscalar_params, isovector_params, coulomb_params
 ):
     r"""sum of coulomb, isoscalar and isovector terms, without spin orbit"""
-    Z, Rc = coulomb_params
-    coul = coulomb_charged_sphere(r, *coulomb_params)
-    nucl = isoscalar(r, *isoscalar_params) + asym_factor * isovector(
-        r, *isovector_params
-    )
-    return nucl + coul
+    coulomb = coulomb_charged_sphere(r, *coulomb_params)
+    centr = central(r, asym_factor, isoscalar_params, isovector_params)
+    return centr + coulomb
 
 
 def central(
@@ -124,9 +121,9 @@ def central(
     isovector_params,
 ):
     r"""sum of isoscalar and isovector terms, without spin orbit"""
-    return isoscalar(r, *isoscalar_params) + asym_factor * isovector(
-        r, *isovector_params
-    )
+    V0 = isoscalar(r, *isoscalar_params)
+    V1 = isovector(r, *isovector_params)
+    return V0 + asym_factor * V1
 
 
 def calculate_parameters(
@@ -162,6 +159,7 @@ def calculate_parameters(
 
     # Coulomb radius equal to isoscalar radius
     RC = R0
+
     # energy
     dE = E - Ef
     if projectile == (1, 1):
