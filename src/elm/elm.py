@@ -17,6 +17,13 @@ from jitr.xs.elastic import DifferentialWorkspace
 
 class Parameter:
     def __init__(self, name, dtype, unit, latex_name):
+        """
+        Parameters:
+            name (str): Name of the parameter
+            dtype (np.dtype): Data type of the parameter
+            unit (str): Unit of the parameter
+            latex_name (str): LaTeX representation of the parameter
+        """
         self.name = name
         self.dtype = dtype
         self.unit = unit
