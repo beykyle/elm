@@ -170,18 +170,17 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = 1.0 + params["alpha"] * dE  # + params["beta"] * dE**2
     erg_w = dE**2 / (dE**2 + params["gamma_w"] ** 2)
     erg_wd = dE**2 / (dE**2 + params["gamma_d"] ** 2)
 
     # isoscalar depths
-    V0 = params["V0"] * erg_v
+    V0 = params["V0"] + params["alpha"] * dE
     W0 = params["W0"] * erg_w
     Wd0 = params["Wd0"] * erg_wd
     Vso = 5.58  # params["Vso"]
 
     # isovector depths
-    V1 = params["V1"] * erg_v
+    V1 = params["V1"] + params["alpha"] * dE
     W1 = params["W1"] * erg_w
     Wd1 = params["Wd1"] * erg_wd
 
