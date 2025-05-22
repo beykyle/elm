@@ -12,7 +12,7 @@ from jitr.optical_potentials.potential_forms import (
     coulomb_charged_sphere,
 )
 from jitr.utils.constants import MASS_PION, ALPHA, HBARC
-from jitr.xs.elastic import DifferentialWorkspace
+from jitr import xs
 
 
 class Parameter:
@@ -37,7 +37,7 @@ params = [
     Parameter("V1", np.float64, r"MeV", r"V_1"),
     Parameter("W1", np.float64, r"MeV", r"W_1"),
     Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
-    #   Parameter("Vso", np.float64, r"MeV", r"V_{so}"),
+    #   Parameter("eta", np.float64, r"dimensionless", r"\eta"),
     Parameter("alpha", np.float64, r"MeV$^{-1}$", r"\alpha"),
     #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
@@ -90,44 +90,46 @@ def read_samples_from_numpy(fpath: Path):
     return array_to_list(np.load(fpath))
 
 
-def isoscalar(r, V0, W0, Wd0, R0, a0, Rd0, ad0):
-    r"""isoscalar part (without spin-orbit) as a function of radial distance r"""
-    volume = -(V0 + 0j * W0) * woods_saxon_safe(r, R0, a0)
-    surface = (4j * a0 * Wd0) * woods_saxon_prime_safe(r, Rd0, ad0)
+def central_form(r, V, W, Wd, R, a, Rd, ad):
+    r"""form of central part (volume and surface) as a function of radial distance"""
+    volume = -(V + 1j * W) * woods_saxon_safe(r, R, a)
+    surface = (4j * ad * Wd) * woods_saxon_prime_safe(r, Rd, ad)
     return volume + surface
 
 
-def isovector(r, V1, W1, Wd1, R1, a1, Rd1, ad1):
-    r"""isovector part (without spin-orbit) as a function of radial distance r"""
-    volume = -(V1 + 1j * W1) * woods_saxon_safe(r, R1, a1)
-    surface = (4j * a1 * Wd1) * woods_saxon_prime_safe(r, Rd1, ad1)
-    return volume + surface
+def spin_orbit_form(r, Vso, Wso, R, a):
+    r"""form of spin-orbit term"""
+    return (Vso + 1j * Wso) / MASS_PION**2 * thomas_safe(r, R, a)
 
 
-def spin_orbit(r, Vso, R0, a0):
-    r"""spin-orbit term"""
-    return Vso / MASS_PION**2 * thomas_safe(r, R0, a0)
+def spin_orbit(
+    r, asym_factor, spin_orbit_isoscalar_params, spin_orbit_isovector_params
+):
+    """sum of spin-orbit isoscalar and isovector terms"""
+    Vso0 = spin_orbit_form(r, *spin_orbit_isoscalar_params)
+    Vso1 = spin_orbit_form(r, *spin_orbit_isovector_params)
+    return Vso0 + asym_factor * Vso1
 
 
 def central_plus_coulomb(
-    r, asym_factor, isoscalar_params, isovector_params, coulomb_params
+    r,
+    asym_factor,
+    central_isoscalar_params,
+    central_isovector_params,
+    coulomb_params,
 ):
-    r"""sum of coulomb, isoscalar and isovector terms, without spin orbit"""
+    r"""sum of coulomb, central isoscalar and central isovector terms"""
     coulomb = coulomb_charged_sphere(r, *coulomb_params)
-    centr = central(r, asym_factor, isoscalar_params, isovector_params)
+    centr = central(r, asym_factor, central_isoscalar_params, central_isovector_params)
     return centr + coulomb
 
 
-def central(
-    r,
-    asym_factor,
-    isoscalar_params,
-    isovector_params,
-):
-    r"""sum of isoscalar and isovector terms, without spin orbit"""
-    V0 = isoscalar(r, *isoscalar_params)
-    V1 = isovector(r, *isovector_params)
-    return V0 + asym_factor * V1
+def central(r, asym_factor, central_isoscalar_params, central_isovector_params):
+    r"""sum of central isoscalar and central isovector terms"""
+    V0 = central(r, *central_isoscalar_params)
+    V1 = central(r, *central_isovector_params)
+    centr = V0 + asym_factor * V1
+    return centr
 
 
 def calculate_parameters(
@@ -142,13 +144,14 @@ def calculate_parameters(
         Ef  (float): Fermi energy for A,Z nucleus
         params (OrderedDict) : subparameter sample
     Returns:
-        isoscalar_params (tuple): (V0, W0, Wd0, R0, a0, Rd, ad)
-        isovector_params (tuple): (V1, W1, Wd1, R1, a1, Rd1, ad1)
-        spin_orbit_params (tuple): (Vso, rso, aso)
+        central isoscalar_params (tuple): (V0, W0, Wd0, R0, a0, Rd, ad)
+        central isovector_params (tuple): (V1, W1, Wd1, R1, a1, Rd1, ad1)
+        spin orbit isocalar params (tuple): (Vso0, rso0, aso0)
+        spin orbit isovector params (tuple): (Vso1, rso1, aso1)
         Coulomb_params (tuple): (Zz, Rc)
         asym_factor =  +(-) (N-Z)/(N+Z), for neutrons(protons)
     """
-    # asymmetry for isovector dependence
+    # asymmetry for central_isovector dependence
     A, Z = target
     Ap, Zp = projectile
     assert Ap == 1 and (Zp == 1 or Zp == 0)
@@ -161,7 +164,7 @@ def calculate_parameters(
     a0 = params["a0"]
     a1 = params["a1"]
 
-    # Coulomb radius equal to isoscalar radius
+    # Coulomb radius equal to central isoscalar radius
     RC = R0
 
     # energy
@@ -170,24 +173,43 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
+    erg_v = 1 + params["alpha"] / params["V0"] * dE
     erg_w = dE**2 / (dE**2 + params["gamma_w"] ** 2)
     erg_wd = dE**2 / (dE**2 + params["gamma_d"] ** 2)
 
-    # isoscalar depths
-    V0 = params["V0"] + params["alpha"] * dE
+    # central isoscalar depths
+    V0 = params["V0"] * erg_v
     W0 = params["W0"] * erg_w
     Wd0 = params["Wd0"] * erg_wd
-    Vso = 5.58  # params["Vso"]
 
-    # isovector depths
-    V1 = params["V1"] + params["alpha"] * dE
+    # central isovector depths
+    V1 = params["V1"] * erg_v
     W1 = params["W1"] * erg_w
     Wd1 = params["Wd1"] * erg_wd
+
+    # spin orbit depths are just a fixed ratio (eta) of central depths
+    # for now, keep this fixed
+    eta = -0.22  # params["eta"]
+
+    # alternative option just fixing all so depths to be A,E independent:
+    # Vso0 = 5.58
+    # Wso0 = 0
+    # Vso1 = 0
+    # Wso1 = 0
+
+    # spin orbit isovector depths
+    Vso0 = V0 * eta
+    Wso0 = W0 * eta
+
+    # spin orbit isovector depths
+    Vso1 = V1 * eta
+    Wso1 = W1 * eta
 
     return (
         (V0, W0, Wd0, R0, a0, R0, a0),
         (V1, W1, Wd1, R1, a1, R1, a1),
-        (Vso, R0, a0),
+        (Vso0, Wso0, R0, a0),
+        (Vso1, Wso1, R0, a0),
         (Z, RC),
         asym_factor,
     )
@@ -200,17 +222,82 @@ def coulomb_correction(A, Z, RC):
     return 6.0 * Z * ALPHA * HBARC / (5 * RC)
 
 
-def calculate_diff_xs(
-    workspace: DifferentialWorkspace,
+def calculate_chex_ias_differential_xs(
+    workspace: xs.quasielastic_pn.Workspace,
+    params: OrderedDict,
+):
+    rxn = workspace.reaction
+    (
+        p_central_isoscalar_params,
+        p_central_isovector_params,
+        p_spin_orbit_isoscalar_params,
+        p_spin_orbit_isovector_params,
+        p_coul_params,
+        p_asym_factor,
+    ) = calculate_parameters(
+        projectile=tuple(rxn.projectile),
+        target=tuple(rxn.target),
+        E=workspace.kinematics_entrance.Ecm,
+        Ef=rxn.target.Efp,
+        params=params,
+    )
+    (
+        n_central_isoscalar_params,
+        n_central_isovector_params,
+        n_spin_orbit_isoscalar_params,
+        n_spin_orbit_isovector_params,
+        _,
+        n_asym_factor,
+    ) = calculate_parameters(
+        projectile=tuple(rxn.residual),
+        target=tuple(rxn.product),
+        E=workspace.kinematics_exit.Ecm,
+        Ef=rxn.residual.Efn,
+        params=params,
+    )
+
+    return workspace.xs(
+        U_p_coulomb=coulomb_charged_sphere,
+        U_p_scalar=central,
+        U_p_spin_orbit=spin_orbit,
+        U_n_central=central,
+        U_n_spin_orbit=spin_orbit,
+        args_p_coulomb=p_coul_params,
+        args_p_scalar=(
+            p_asym_factor,
+            p_central_isoscalar_params,
+            p_central_isovector_params,
+        ),
+        args_p_spin_orbit=(
+            p_asym_factor,
+            p_spin_orbit_isoscalar_params,
+            p_spin_orbit_isovector_params,
+        ),
+        args_n_scalar=(
+            n_asym_factor,
+            n_central_isoscalar_params,
+            n_central_isovector_params,
+        ),
+        args_n_spin_orbit=(
+            n_asym_factor,
+            n_spin_orbit_isoscalar_params,
+            n_spin_orbit_isovector_params,
+        ),
+    )
+
+
+def calculate_elastic_differential_xs(
+    workspace: xs.elastic.DifferentialWorkspace,
     params: OrderedDict,
 ):
     rxn = workspace.reaction
     kinematics = workspace.kinematics
     assert rxn.projectile.A == 1
     (
-        isoscalar_params,
-        isovector_params,
-        spin_orbit_params,
+        central_isoscalar_params,
+        central_isovector_params,
+        spin_orbit_isoscalar_params,
+        spin_orbit_isovector_params,
         coul_params,
         asym_factor,
     ) = calculate_parameters(
@@ -225,9 +312,13 @@ def calculate_diff_xs(
         interaction_spin_orbit=spin_orbit,
         args_central=(
             asym_factor,
-            isoscalar_params,
-            isovector_params,
+            central_isoscalar_params,
+            central_isovector_params,
             coul_params,
         ),
-        args_spin_orbit=spin_orbit_params,
+        args_spin_orbit=(
+            asym_factor,
+            spin_orbit_isoscalar_params,
+            spin_orbit_isovector_params,
+        ),
     )
