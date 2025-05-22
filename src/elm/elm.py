@@ -227,6 +227,8 @@ def calculate_chex_ias_differential_xs(
     params: OrderedDict,
 ):
     rxn = workspace.reaction
+    assert rxn.projectile == (1,1)
+    assert rxn.product == (1,0)
     (
         p_central_isoscalar_params,
         p_central_isovector_params,
