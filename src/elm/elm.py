@@ -11,7 +11,7 @@ from jitr.optical_potentials.potential_forms import (
     woods_saxon_safe,
     coulomb_charged_sphere,
 )
-from jitr.utils.constants import MASS_PION, ALPHA, HBARC
+from jitr.utils.constants import ALPHA, HBARC
 from jitr import xs
 
 
@@ -97,9 +97,9 @@ def central_form(r, V, W, Wd, R, a, Rd, ad):
     return volume + surface
 
 
-def spin_orbit_form(r, Vso, Wso, R, a):
+def spin_orbit_form(r, Vso, Wso, R, a, rho):
     r"""form of spin-orbit term"""
-    return (Vso + 1j * Wso) / MASS_PION**2 * thomas_safe(r, R, a)
+    return (Vso + 1j * Wso) * rho**2 * thomas_safe(r, R, a)
 
 
 def spin_orbit(
@@ -126,8 +126,8 @@ def central_plus_coulomb(
 
 def central(r, asym_factor, central_isoscalar_params, central_isovector_params):
     r"""sum of central isoscalar and central isovector terms"""
-    V0 = central(r, *central_isoscalar_params)
-    V1 = central(r, *central_isovector_params)
+    V0 = central_form(r, *central_isoscalar_params)
+    V1 = central_form(r, *central_isovector_params)
     centr = V0 + asym_factor * V1
     return centr
 
@@ -189,7 +189,7 @@ def calculate_parameters(
 
     # spin orbit depths are just a fixed ratio (eta) of central depths
     # for now, keep this fixed
-    eta = -0.22  # params["eta"]
+    eta = 0.44  # params["eta"]
 
     # alternative option just fixing all so depths to be A,E independent:
     # Vso0 = 5.58
@@ -208,8 +208,8 @@ def calculate_parameters(
     return (
         (V0, W0, Wd0, R0, a0, R0, a0),
         (V1, W1, Wd1, R1, a1, R1, a1),
-        (Vso0, Wso0, R0, a0),
-        (Vso1, Wso1, R0, a0),
+        (Vso0, Wso0, R0, a0, params["r0A"]),
+        (Vso1, Wso1, R1, a1, params["r1A"]),
         (Z, RC),
         asym_factor,
     )
