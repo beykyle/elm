@@ -199,11 +199,13 @@ def calculate_parameters(
 
     # spin orbit isovector depths
     Vso0 = V0 * eta
-    Wso0 = W0 * eta
+    # fix at KDUQ value but convert from form using
+    # (hbar/mpi c)^2 * l.sigma to 1/r0^2 * (l.s)
+    Wso0 = -3.1 * params["r0A"]**2 / 4
 
     # spin orbit isovector depths
     Vso1 = V1 * eta
-    Wso1 = W1 * eta
+    Wso1 = 0
 
     return (
         (V0, W0, Wd0, R0, a0, R0, a0),
