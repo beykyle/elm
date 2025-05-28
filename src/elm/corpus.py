@@ -28,8 +28,6 @@ class Corpus:
         Total number of data points.
     nparams : int
         Total number of free parameters in the model.
-    model_name : str
-        name or label for the model
 
     Methods
     -------
@@ -45,11 +43,14 @@ class Corpus:
         self,
         constraints: list[Constraint],
         n_params: int,
+        model_name: str,
+        corpus_name: str,
         weights: np.ndarray = None,
     ):
         self.constraints = constraints
         self.n_params = n_params
-        self.model_name = self.constraints[0].model.name
+        self.model_name = model_name
+        self.corpus_name = corpus_name
         self.y = np.hstack([constraint.y for constraint in self.constraints])
         self.x = np.hstack([constraint.x for constraint in self.constraints])
         self.n_data_pts = self.y.size
@@ -215,6 +216,7 @@ class ElasticAngularCorpus(Corpus):
         self,
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
         model_name: str,
+        corpus_name: str,
         n_params: int,
         quantity: str,
         workspaces: list[ElasticWorkspace],
@@ -277,7 +279,7 @@ class ElasticAngularCorpus(Corpus):
                     **constraint_kwargs,
                 )
             )
-        super().__init__(constraints, n_params, model_name, weights)
+        super().__init__(constraints, n_params, model_name, corpus_name, weights)
 
     def set_model(
         self,
