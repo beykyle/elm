@@ -16,8 +16,15 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools_scm]
 write_to = "src/__version__.py"
+
+# Specify the console script entry point
+[project.scripts]
+mcmc = "calibration.mcmc:main"
