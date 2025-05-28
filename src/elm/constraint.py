@@ -1,7 +1,8 @@
 from collections import OrderedDict
 
 import numpy as np
-from scipy.stats import multivariate_normal
+
+# from scipy.stats import multivariate_normal
 
 from exfor_tools.distribution import Distribution
 from .model import Model
@@ -9,16 +10,16 @@ from .model import Model
 
 def log_likelihood_cholesky(y, mu, cov):
     """
-    Will need if cov_inv can't be precomputed
+    Will need this if cov_inv can't be precomputed
     """
     n = len(y)
     delta = y - mu
 
     # Cholesky decomposition: cov = L @ L.T
-    L = cholesky(cov, lower=True)
+    L = np.linalg.cholesky(cov, lower=True)
 
     # Solve L z = delta --> z = L^{-1} delta
-    z = solve_triangular(L, delta, lower=True)
+    z = np.lonalg.solve_triangular(L, delta, lower=True)
 
     # Mahalanobis distance: z^T z
     mahalanobis = np.dot(z, z)
@@ -72,11 +73,15 @@ class Constraint:
             )
 
         self.cov_inv = np.linalg.inv(self.covariance)
-        self.y_distribution = multivariate_normal(
-            mean=self.y,
-            cov=self.covariance,
-            allow_singular=False,
-        )
+        sign, self.log_det = np.linalg.slogdet(self.covariance)
+        if sign != +1:
+            raise ValueError("Invalid covariance matrix! Must be positive definite.")
+
+        # self.y_distribution = multivariate_normal(
+        #    mean=self.y,
+        #    cov=self.covariance,
+        #    allow_singular=False,
+        # )
 
     def residual(self, params: OrderedDict):
         """
@@ -126,8 +131,12 @@ class Constraint:
         -------
         float
         """
-        ym = self.model(params)
-        return self.y_distribution.logpdf(ym)
+
+        # ym = self.model(params)
+        # return self.y_distribution.logpdf(ym)
+        r = self.residual(params)
+        mahalanobis = r.T @ self.cov_inv @ r
+        return -0.5 * (mahalanobis + self.log_det + self.n_data_pts * np.log(2 * np.pi))
 
     def num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
         """
@@ -161,8 +170,9 @@ class Constraint:
         -------
         float
         """
-        prob = self.y_distribution.cdf(yhigh) - self.y_distribution.cdf(ylow)
-        return prob * self.n_data_pts
+        pass
+        # prob = self.y_distribution.cdf(yhigh) - self.y_distribution.cdf(ylow)
+        # return prob * self.n_data_pts
 
 
 class ReactionConstraint(Constraint):

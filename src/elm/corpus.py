@@ -269,16 +269,22 @@ class ElasticAngularCorpus(Corpus):
                 norm = 1000.0 / workspace.constraint_workspace.rutherford
             else:
                 norm = None
-
-            constraints.append(
-                ReactionConstraint(
-                    quantity=self.quantity,
-                    measurement=measurement,
-                    model=ElasticModel(workspace, model),
-                    normalize=norm,
-                    **constraint_kwargs,
+            try:
+                constraints.append(
+                    ReactionConstraint(
+                        quantity=self.quantity,
+                        measurement=measurement,
+                        model=ElasticModel(workspace, model),
+                        normalize=norm,
+                        **constraint_kwargs,
+                    )
                 )
-            )
+            except Exception as e:
+                raise Exception(
+                    "An error occurred while processing measurement "
+                    f"from subentry {measurement.subentry}"
+                ) from e
+
         super().__init__(constraints, n_params, model_name, corpus_name, weights)
 
     def set_model(
