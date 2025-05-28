@@ -23,7 +23,7 @@ sample = elm.read_sample_from_json( "path/to/sample.json" )
 print(sample)
 ```
 
-should print the `dict` with parameter names as keys and their values as values, something like:
+should print the `OrderedDict` with parameter names as keys and their values as values, something like:
 
 ```
 { 
@@ -41,7 +41,7 @@ Ca48 = (48, 20)
 neutron = (1,0)
 com_frame_energy = 13.9
 fermi_energy = -7.59
-isoscalar_params, isovector_params, spin_orbit_params, coulomb_params, delta = 
+isoscalar_central_params, isovector_central_params, isoscalar_spin_orbit_params, isovector_spin_orbit_params, coulomb_params, delta = 
     elm.calculate_parameters(
         neutron, Ca48, com_frame_energy, fermi_energy, sample
     )
@@ -51,45 +51,41 @@ Now we can evaluate the different parts of the model on a radial coordinate grid
 
 ```python
 r = np.linspace(0.01, 10, 200)
-v0  = elm.isoscalar(r, *isoscalar_params)
+v0  = elm.isoscalar(r, *isoscalar_central_params)
 ```
 
 and so on.
 
 ## samples
 
-## install
+## install for development or modification
 
+To modify the model, first clone and build
 ```bash
 git clone git@github.com:beykyle/elm.git
 cd elm
-pip install -e .
+python3 -m build
 ```
 
-Now you can
+Then install an editable version locally like so:
+
+```
+pip install -ve .
+```
+
+It is highly recommended that you use an isolated virtual environment (e.g. using [venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) or [conda/mamba](https://mamba.readthedocs.io/en/latest/)), as this action will install all of the dependencies in `requirements.txt`, at the specific version required.
+
+Once you've installed the local version, you can in python
 ```python
 import elm
 ```
 
-and use the provided samples and implementation. 
+This allows you to run all of the notebooks, to set up and visualize the results of a calibration.
 
-## useage with git submodule
 
-Another way to use the ELM in your project is to use git submodules like so (from within your project git directory):
+Once you've set up your calibration (e.g. by stepping through the notebooks in `prior/`, `data/` and `calibration/`), you can run `mcmc` to run the actual calibration:
 
-```bash
-git submodule add git@github.com:beykyle/elm.git
+```
+mpirun -n 1 python -m mpi4py mcmc.py --help
 ```
 
-then you can include `elm` like so:
-
-```python
-from elm.src import elm
-```
-
-This way may be quick and easy way to use different versions of the ELM for different projects. To change the version, simply
-
-```bash
-cd elm
-git checkout <desired branch or tag>
-```
