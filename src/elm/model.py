@@ -18,8 +18,7 @@ class Model:
     Represents an arbitrary parameteric model
     """
 
-    def __init__(self, x: np.ndarray, name: str):
-        self.name = name
+    def __init__(self, x: np.ndarray):
         self.x = x
 
     def __call__(self, params: OrderedDict):
@@ -111,11 +110,10 @@ class ElasticModel(Model):
         self,
         workspace: ElasticWorkspace,
         model: Callable[[DifferentialWorkspace, OrderedDict], ElasticXS],
-        name: str,
     ):
         self.workspace = workspace
         self.model = model
-        super().__init__(self.workspace.constraint_workspace.angles, name)
+        super().__init__(self.workspace.constraint_workspace.angles)
 
     def __call__(self, params: OrderedDict) -> np.ndarray:
         """
