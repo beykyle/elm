@@ -33,7 +33,7 @@ def metropolis_hastings(x0, n_steps, log_prob, propose, burn_in=1000):
     accepted = 0
     x = x0
     for i in range(n_steps):
-        x_new = x + propose()
+        x_new = propose(x)
         logp_new = log_prob(x_new)
         accept_prob = np.exp(logp_new - logp)
 
@@ -104,24 +104,33 @@ def main():
     prior, path = args.prior_path
     if not hasattr(prior, "logpdf") or not callable(getattr(prior, "logpdf")):
         raise argparse.ArgumentTypeError(
-            f"Object in '{path}' does not support logpdf (.logpdf() method missing or not callable)."
+            f"Object in '{path}' does not support logpdf "
+            "(.logpdf() method missing or not callable)."
+        )
+    if not hasattr(prior, "cov") or not hasattr(prior, "mean"):
+        raise argparse.ArgumentTypeError(
+            f"Object in '{path}' does not have `mean` and `cov` attributes."
         )
 
     # read in corpus
     corpus, path = args.corpus_path
     if not hasattr(corpus, "logpdf") or not callable(getattr(corpus, "logpdf")):
         raise argparse.ArgumentTypeError(
-            f"Object in '{path}' does not support logpdf (.logpdf() method missing or not callable)."
+            f"Object in '{path}' does not support logpdf "
+            "(.logpdf() method missing or not callable)."
         )
 
     # proposal distribution
     proposal_cov = prior.cov / args.proposal_cov_scale_factor
-    proposal = stats.multivariate_normal(np.zeros_like(prior.mean), proposal_cov)
+    proposal_mean = np.zeros_like(prior.mean)
+
+    def proposal(x):
+        return x + stats.multivariate_normal.rvs(mean=proposal_mean, cov=proposal_cov)
 
     def log_prob(x):
         return prior.logpdf(x) + corpus.logpdf(elm.to_ordered_dict(x))
 
-    x0 = prior.mean + proposal.rvs
+    x0 = proposal(prior.mean)
 
     if args.batch_size is not None:
         rem = args.n_steps % args.batch_size
@@ -134,15 +143,25 @@ def main():
     accepted = 0
     for i, steps_in_batch in enumerate(batches):
         batch_chain, accepted_in_batch = metropolis_hastings(
-            x0, steps_in_batch, log_prob, proposal.rvs, burn_in=args.burnin
+            x0, steps_in_batch, log_prob, proposal, burn_in=args.burnin
         )
+
+        # diagnostics
         accepted += accepted_in_batch
         chain = np.vstack([chain, batch_chain])
         x0 = chain[-1]
         if args.verbose:
             print(
-                f"Rank: {rank}. Batch: {i}/{len(batches)}. Acceptance fraction: {accepted_in_batch/steps_in_batch}"
+                f"Rank: {rank}. Batch: {i}/{len(batches)}. "
+                f"Acceptance fraction: {accepted_in_batch/steps_in_batch}"
             )
+
+        # update proposal distribution?
+        # TODO
+
+        # update unknown covariance factor estimate (Gibbs sampling)
+
+        # write record of chain to disk
         np.save(Path(f"./chain_{rank}.npy"), chain)
 
     all_chains = comm.gather(chain, root=0)
