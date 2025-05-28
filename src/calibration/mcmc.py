@@ -39,7 +39,7 @@ def metropolis_hastings(
     if rng is None:
         rng = np.random.default_rng(42)
     chain = np.zeros((n_steps - burn_in, x0.size))
-    logp = np.zeros((n_steps - burn_in, x0.size))
+    logp_chain = np.zeros((n_steps - burn_in, x0.size))
     logp = log_prob(x0)
     accepted = 0
     x = x0
@@ -55,9 +55,9 @@ def metropolis_hastings(
 
         if i >= burn_in:
             chain[i - burn_in] = x
-            logp[i - burn_in] = logp
+            logp_chain[i - burn_in] = logp
 
-    return np.array(chain), np.array(logp), accepted
+    return np.array(chain), np.array(logp_chain), accepted
 
 
 def parse_options(comm):
