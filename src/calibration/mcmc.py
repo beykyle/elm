@@ -39,7 +39,7 @@ def metropolis_hastings(
     if rng is None:
         rng = np.random.default_rng(42)
     chain = np.zeros((n_steps - burn_in, x0.size))
-    logp_chain = np.zeros((n_steps - burn_in, x0.size))
+    logp_chain = np.zeros((n_steps - burn_in,))
     logp = log_prob(x0)
     accepted = 0
     x = x0
