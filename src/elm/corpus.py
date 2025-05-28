@@ -19,7 +19,7 @@ class Corpus:
     Attributes
     ----------
     constraints : list of Constraint
-        A list of constraints.
+        A list of constraints with the same model.
     y : np.ndarray
         Combined y values from all constraints.
     x : np.ndarray
@@ -45,19 +45,19 @@ class Corpus:
         self,
         constraints: list[Constraint],
         n_params: int,
-        model_name: str,
         weights: np.ndarray = None,
     ):
         self.constraints = constraints
         self.n_params = n_params
-        self.model_name = model_name
+        self.model_name = self.constraints[0].model.name
         self.y = np.hstack([constraint.y for constraint in self.constraints])
         self.x = np.hstack([constraint.x for constraint in self.constraints])
         self.n_data_pts = self.y.size
         self.n_dof = self.n_data_pts - self.n_params
         if self.n_dof < 0:
             raise ValueError(
-                f"Model under-constrained! {self.n_params} free parameters and {self.n_data_pts} data points"
+                f"Model under-constrained! {self.n_params} free parameters"
+                f"and {self.n_data_pts} data points"
             )
 
         if weights is None:
@@ -101,15 +101,32 @@ class Corpus:
             Chi-squared value for the given parameters.
         """
         return sum(
-            constraint.chi2(params)
+            constraint.chi2(params) * weight
             for weight, constraint in zip(self.weights, self.constraints)
         )
 
-    def empirical_coverage(
-        self, ylow: np.ndarray, yhigh: np.ndarray, method: str = "count"
-    ):
+    def logpdf(self, params: OrderedDict):
         """
-        Compute the empirical coverage within the given interval.
+        Returns the log-pdf that the Model, given params, reproduces y
+
+        Parameters
+        ----------
+        params : OrderedDict
+            parameters of model
+
+        Returns
+        -------
+        float
+        """
+        return sum(
+            constraint.logpdf(params) * weight
+            for weight, constraint in zip(self.weights, self.constraints)
+        )
+
+    def num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
+        """
+        Compute the empirical coverage within the given interval by summing
+        the number of points within the interval.
 
         Parameters
         ----------
@@ -117,31 +134,44 @@ class Corpus:
             Lower bounds of the interval.
         yhigh : np.ndarray
             Upper bounds of the interval.
-        method : str, optional
-            Method to compute coverage ('count' or 'average'), by
-            default 'count'.
 
         Returns
         -------
         float
             Empirical coverage within the given interval.
         """
-        if method == "count":
-            return (
-                sum(
-                    constraint.num_pts_within_interval(ylow, yhigh)
-                    for constraint in self.constraints
-                )
-                / self.n_data_pts
+        return (
+            sum(
+                constraint.num_pts_within_interval(ylow, yhigh)
+                for constraint in self.constraints
             )
-        elif method == "average":
-            return (
-                sum(
-                    constraint.expected_num_pts_within_interval(ylow, yhigh)
-                    for constraint in self.constraints
-                )
-                / self.n_data_pts
+            / self.n_data_pts
+        )
+
+    def expected_num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
+        """
+        Compute the empirical coverage within the given interval by taking the
+        expectation value of the number of points within the interval.
+
+        Parameters
+        ----------
+        ylow : np.ndarray
+            Lower bounds of the interval.
+        yhigh : np.ndarray
+            Upper bounds of the interval.
+
+        Returns
+        -------
+        float
+            Empirical coverage within the given interval.
+        """
+        return (
+            sum(
+                constraint.expected_num_pts_within_interval(ylow, yhigh)
+                for constraint in self.constraints
             )
+            / self.n_data_pts
+        )
 
 
 def build_workspaces_from_measurements(

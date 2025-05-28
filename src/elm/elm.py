@@ -67,11 +67,15 @@ def read_sample_from_json(fpath: Path):
 
 
 def array_to_list(samples: np.ndarray):
-    return [OrderedDict(zip([p.name for p in params], entry)) for entry in samples]
+    return [to_ordered_dict(sample) for sample in samples]
 
 
 def list_to_array(samples: list):
     return np.array([(sample.values()) for sample in samples], dtype=params_dtype)
+
+
+def to_ordered_dict(sample: np.ndarray):
+    return OrderedDict(zip([p.name for p in params], sample))
 
 
 def list_to_dataframe(samples: list):
@@ -201,7 +205,7 @@ def calculate_parameters(
     Vso0 = V0 * eta
     # fix at KDUQ value but convert from form using
     # (hbar/mpi c)^2 * l.sigma to 1/r0^2 * (l.s)
-    Wso0 = -3.1 * params["r0A"]**2 / 4
+    Wso0 = -3.1 * params["r0A"] ** 2 / 4
 
     # spin orbit isovector depths
     Vso1 = V1 * eta
@@ -229,8 +233,8 @@ def calculate_chex_ias_differential_xs(
     params: OrderedDict,
 ):
     rxn = workspace.reaction
-    assert rxn.projectile == (1,1)
-    assert rxn.product == (1,0)
+    assert rxn.projectile == (1, 1)
+    assert rxn.product == (1, 0)
     (
         p_central_isoscalar_params,
         p_central_isovector_params,

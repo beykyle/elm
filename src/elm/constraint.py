@@ -7,10 +7,32 @@ from exfor_tools.distribution import Distribution
 from .model import Model
 
 
+def log_likelihood_cholesky(y, mu, cov):
+    """
+    Will need if cov_inv can't be precomputed
+    """
+    n = len(y)
+    delta = y - mu
+
+    # Cholesky decomposition: cov = L @ L.T
+    L = cholesky(cov, lower=True)
+
+    # Solve L z = delta --> z = L^{-1} delta
+    z = solve_triangular(L, delta, lower=True)
+
+    # Mahalanobis distance: z^T z
+    mahalanobis = np.dot(z, z)
+
+    # Log determinant: log(det(Sigma)) = 2 * sum(log(diag(L)))
+    log_det = 2 * np.sum(np.log(np.diag(L)))
+
+    return -0.5 * (mahalanobis + log_det + n * np.log(2 * np.pi))
+
+
 class Constraint:
     """
     Represents experimental data y, which is assumed to be
-    a random variate distributed according to a multivariate_normal
+    a random variate distributed according to a multivariate normal
     around y with an arbitrary covariance matrix, along with some
     parameteric Model which produces predictions for y given a
     set of parameters
@@ -50,17 +72,20 @@ class Constraint:
             )
 
         self.cov_inv = np.linalg.inv(self.covariance)
-        self.dist = multivariate_normal(
-            mean=self.y, cov=self.covariance, allow_singular=True
+        self.y_distribution = multivariate_normal(
+            mean=self.y,
+            cov=self.covariance,
+            allow_singular=False,
         )
 
     def residual(self, params: OrderedDict):
         """
         Calculate the residuals.
+
         Parameters
         ----------
-        ym : array-like
-            model prediction of y
+        params : OrderedDict
+            parameters of model
 
         Returns
         -------
@@ -72,15 +97,13 @@ class Constraint:
 
     def chi2(self, params: OrderedDict):
         """
-        Calculate the generalised chi-squared statistic.
+        Calculate the generalised chi-squared statistic. This is the
+        Malahanobis distance between y and model(params).
 
         Parameters
         ----------
-        ym : array-like
-            model prediction of y
-        model_covariance : array-like (defaults to None)
-            model covariance, shape should be (n_data_pts , n_data_pts)
-
+        params : OrderedDict
+            parameters of model
 
         Returns
         -------
@@ -89,6 +112,22 @@ class Constraint:
         """
         delta = self.residual(params)
         return delta.T @ self.cov_inv @ delta
+
+    def logpdf(self, params: OrderedDict):
+        """
+        Returns the logpdf that the Model, given params, reproduces y
+
+        Parameters
+        ----------
+        params : OrderedDict
+            parameters of model
+
+        Returns
+        -------
+        float
+        """
+        ym = self.model(params)
+        return self.y_distribution.logpdf(ym)
 
     def num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
         """
@@ -122,7 +161,7 @@ class Constraint:
         -------
         float
         """
-        prob = self.dist.cdf(yhigh) - self.dist.cdf(ylow)
+        prob = self.y_distribution.cdf(yhigh) - self.y_distribution.cdf(ylow)
         return prob * self.n_data_pts
 
 
