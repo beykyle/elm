@@ -7,8 +7,7 @@ from scipy import stats
 
 from mpi4py import MPI
 
-from . import elm
-
+from elm import elm
 
 def validate_pickle_file(path_str: str):
     path = Path(path_str)
