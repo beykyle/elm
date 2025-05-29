@@ -41,7 +41,10 @@ mamba activate elm
 export X43I_DATAPATH="/mnt/home/beyerkyl/x4db/unpack_exfor-2024/X4-2024-12-31"
 
 # run calibration, with one chain on each available core
-mpirun -n "$SLURM_NTASKS" mcmc --nsteps 10000 --burnin 1000  --corpus_path ./nn_corpus.pkl --prior_path ~/elm/elm/prior/prior_distribution.pickle
+mpirun -n "$SLURM_NTASKS" mcmc \
+    --nsteps 10000 --burnin 1000 --batch_size 100 \
+    --corpus_path ./nn_corpus.pkl \
+    --prior_path ~/elm/elm/prior/prior_distribution.pickle
 
 # Print resource information
 scontrol show job $SLURM_JOB_ID
