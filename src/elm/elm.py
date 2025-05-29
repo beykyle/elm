@@ -38,7 +38,7 @@ params = [
     Parameter("W1", np.float64, r"MeV", r"W_1"),
     Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
     #   Parameter("eta", np.float64, r"dimensionless", r"\eta"),
-    Parameter("alpha", np.float64, r"MeV$^{-1}$", r"\alpha"),
+    Parameter("alpha", np.float64, r"dimensionless", r"\alpha"),
     #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
     Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
@@ -177,45 +177,44 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = 1 + params["alpha"] / params["V0"] * dE
     erg_w = dE**2 / (dE**2 + params["gamma_w"] ** 2)
     erg_wd = dE**2 / (dE**2 + params["gamma_d"] ** 2)
 
     # central isoscalar depths
-    V0 = params["V0"] * erg_v
+    V0 = params["V0"]  - params["alpha"] * dE
     W0 = params["W0"] * erg_w
     Wd0 = params["Wd0"] * erg_wd
 
     # central isovector depths
-    V1 = params["V1"] * erg_v
+    V1 = params["V1"] - params["alpha"] * dE
     W1 = params["W1"] * erg_w
     Wd1 = params["Wd1"] * erg_wd
 
     # spin orbit depths are just a fixed ratio (eta) of central depths
     # for now, keep this fixed
-    eta = 0.44  # params["eta"]
+    #eta = 0.44  # params["eta"]
 
     # alternative option just fixing all so depths to be A,E independent:
-    # Vso0 = 5.58
-    # Wso0 = 0
-    # Vso1 = 0
-    # Wso1 = 0
+    Vso0 = 5.58
+    Wso0 = 0
+    Vso1 = 0
+    Wso1 = 0
 
     # spin orbit isovector depths
-    Vso0 = V0 * eta
+    #Vso0 = V0 * eta
     # fix at KDUQ value but convert from form using
     # (hbar/mpi c)^2 * l.sigma to 1/r0^2 * (l.s)
-    Wso0 = -3.1 * params["r0A"] ** 2 / 4
+    #Wso0 = -3.1 * params["r0A"] ** 2 / 4
 
     # spin orbit isovector depths
-    Vso1 = V1 * eta
-    Wso1 = 0
+    #Vso1 = V1 * eta
+    #Wso1 = 0
 
     return (
         (V0, W0, Wd0, R0, a0, R0, a0),
         (V1, W1, Wd1, R1, a1, R1, a1),
-        (Vso0, Wso0, R0, a0, params["r0A"]),
-        (Vso1, Wso1, R1, a1, params["r1A"]),
+        (Vso0, Wso0, R0, a0, 1.27),
+        (Vso1, Wso1, R1, a1, 1.27),
         (Z, RC),
         asym_factor,
     )
