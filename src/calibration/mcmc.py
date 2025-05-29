@@ -162,6 +162,7 @@ def parse_options(comm):
 def main():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    size = comm.Get_size()
     args = parse_options(comm)
 
     prior = args.prior
@@ -191,9 +192,13 @@ def main():
     else:
         batches = [args.nsteps]
 
+    if rank == 0:
+        print(f"Running {args.nsteps} on {size} MPI ranks")
+
     chain = []
     logp = []
     accepted = 0
+
     for i, steps_in_batch in enumerate(batches):
         batch_chain, batch_logp, accepted_in_batch = metropolis_hastings(
             x0,
