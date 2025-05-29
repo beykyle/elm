@@ -31,33 +31,31 @@ def validate_pickle_file(path_str: str):
 def metropolis_hastings(
     x0,
     n_steps,
-    log_prob,
+    log_likelihood,
     propose,
-    burn_in=1000,
     rng=None,
 ):
     if rng is None:
         rng = np.random.default_rng(42)
-    chain = np.zeros((n_steps - burn_in, x0.size))
-    logp_chain = np.zeros((n_steps - burn_in,))
-    logp = log_prob(x0)
+    chain = np.zeros((n_steps, x0.size))
+    logl_chain = np.zeros((n_steps,))
+    logl = log_likelihood(x0)
     accepted = 0
     x = x0
     for i in range(n_steps):
         x_new = propose(x)
-        logp_new = log_prob(x_new)
-        log_ratio = min(0, logp_new - logp)
+        logl_new = log_likelihood(x_new)
+        log_ratio = min(0, logl_new - logl)
         xi = np.log(rng.random())
         if xi < log_ratio:
             x = x_new
-            logp = logp_new
+            logl = logl_new
             accepted += 1
 
-        if i >= burn_in:
-            chain[i - burn_in] = x
-            logp_chain[i - burn_in] = logp
+        chain[i, ...] = x
+        logl_chain[i] = logl
 
-    return np.array(chain), np.array(logp_chain), accepted
+    return np.array(chain), np.array(logl_chain), accepted
 
 
 def parse_options(comm):
@@ -165,11 +163,29 @@ def main():
     size = comm.Get_size()
     args = parse_options(comm)
 
+    # batching
+    if args.batch_size is not None:
+        rem_burn = args.burnin % args.batch_size
+        n_burn_batches = args.burnin // args.batch_size
+        burn_batches = n_burn_batches * [args.batch_size] + (rem_burn > 0) * [rem_burn]
+
+        rem = (args.nsteps - args.burnin) % args.batch_size
+        n_full_batches = (args.nsteps - args.burnin) // args.batch_size
+        batches = n_full_batches * [args.batch_size] + (rem > 0) * [rem]
+    else:
+        batches = [args.nsteps - args.burnin]
+        burn_batches = [args.burnin]
+
+    # RNG
+    seed = args.seed + rank
+    rng = np.random.default_rng(seed)
+
+    # likelihood
     prior = args.prior
     corpus = args.corpus
 
-    seed = args.seed + rank
-    rng = np.random.default_rng(seed)
+    def log_likelihood(x):
+        return prior.logpdf(x) + corpus.logpdf(elm.to_ordered_dict(x))
 
     # proposal distribution
     proposal_cov = prior.cov / args.proposal_cov_scale_factor
@@ -180,66 +196,70 @@ def main():
             mean=proposal_mean, cov=proposal_cov, random_state=rng
         )
 
-    def log_prob(x):
-        return prior.logpdf(x) + corpus.logpdf(elm.to_ordered_dict(x))
-
+    # starting location
     x0 = proposal(prior.mean)
 
-    if args.batch_size is not None:
-        rem = args.nsteps % args.batch_size
-        n_full_batches = args.nsteps // args.batch_size
-        batches = n_full_batches * [args.batch_size] + (rem > 0) * [rem]
-    else:
-        batches = [args.nsteps]
+    # run burn-in
+    for i, steps_in_batch in enumerate(burn_batches):
+        batch_chain, _, _ = metropolis_hastings(
+            x0,
+            steps_in_batch,
+            log_likelihood,
+            proposal,
+            rng=rng,
+        )
+        if args.verbose:
+            print(
+                f"Rank: {rank}. Burn-in batch {i+1}/{len(burn_batches)} completed, {steps_in_batch} steps."
+            )
 
-    if rank == 0:
-        print(f"Running {args.nsteps} on {size} MPI ranks")
+    # update starter location to tail of burn-in
+    x0 = batch_chain[-1]
 
+    # run real steps
     chain = []
-    logp = []
+    logl = []
     accepted = 0
 
     for i, steps_in_batch in enumerate(batches):
-        batch_chain, batch_logp, accepted_in_batch = metropolis_hastings(
+        batch_chain, batch_logl, accepted_in_batch = metropolis_hastings(
             x0,
             steps_in_batch,
-            log_prob,
+            log_likelihood,
             proposal,
-            burn_in=args.burnin if i == 0 else 0,
             rng=rng,
         )
 
         # diagnostics
         accepted += accepted_in_batch
         chain.append(batch_chain)
-        logp.append(batch_logp)
+        logl.append(batch_logl)
         x0 = batch_chain[-1]
         if args.verbose:
             print(
-                f"Rank: {rank}. Batch: {i}/{len(batches)}. "
-                f"Acceptance fraction: {accepted_in_batch/steps_in_batch}"
+                f"Rank: {rank}. Batch: {i+1}/{len(batches)} completed, {steps_in_batch} steps. "
+                f"Acceptance frac: {accepted_in_batch/steps_in_batch}"
             )
 
         # update proposal distribution?
-        # TODO
 
         # update unknown covariance factor estimate (Gibbs sampling)
 
         # write record of batch chain to disk
         np.save(Path(f"./chain_{rank}_{i}.npy"), batch_chain)
 
-    logp = np.concatenate(logp, axis=0)
+    logl = np.concatenate(logl, axis=0)
     chain = np.concatenate(chain, axis=0)
 
     # MPI Gather
-    all_logp = comm.gather(logp, root=0)
+    all_logl = comm.gather(logl, root=0)
     all_chains = comm.gather(chain, root=0)
     accepted = comm.gather(accepted, root=0)
 
     if rank == 0:
         all_chains = np.array(all_chains)
-        all_logp = np.array(all_logp)
-        acc_fracs = np.array(accepted) / args.nsteps
+        all_logl = np.array(all_logl)
+        acc_fracs = np.array(accepted) / (args.nsteps - args.burnin)
         print(f"\nFinished sampling all {len(all_chains)} chains.")
         print(f"Chain shape: {all_chains.shape}")
         print(f"Average acceptance fraction: {np.mean(acc_fracs):.3f}")
@@ -247,7 +267,7 @@ def main():
             print(f"  Chain {i}: acceptance fraction = {af:.3f}")
 
     np.save(Path(args.output) / "all_chains.npy", all_chains)
-    np.save(Path(args.output) / "log_likelihood.npy", all_logp)
+    np.save(Path(args.output) / "log_likelihood.npy", all_logl)
 
 
 if __name__ == "__main__":
