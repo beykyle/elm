@@ -186,7 +186,7 @@ def main():
     x0 = proposal(prior.mean)
 
     if args.batch_size is not None:
-        rem = args.n_steps % args.batch_size
+        rem = args.nsteps % args.batch_size
         n_full_batches = args.nsteps // args.batch_size
         batches = n_full_batches * [args.batch_size] + (rem > 0) * [rem]
     else:
