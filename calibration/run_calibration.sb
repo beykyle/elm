@@ -8,7 +8,7 @@
 
 # Memory per node
 # Specify "M" or "G" for MB and GB respectively
-#SBATCH --mem=200M
+#SBATCH --mem=16G
 
 # Wall time
 # Format: "minutes", "hours:minutes:seconds", 
