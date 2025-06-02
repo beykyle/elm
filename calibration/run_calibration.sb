@@ -8,12 +8,12 @@
 
 # Memory per node
 # Specify "M" or "G" for MB and GB respectively
-#SBATCH --mem=16G
+#SBATCH --mem=100G
 
 # Wall time
 # Format: "minutes", "hours:minutes:seconds", 
 # "days-hours", or "days-hours:minutes"
-#SBATCH --time=1-12:00:00
+#SBATCH --time=8:00:00
 
 # Mail type
 # e.g., which events trigger email notifications
@@ -40,12 +40,11 @@ mamba activate elm
 ## set any env variables we need
 export X43I_DATAPATH="/mnt/home/beyerkyl/x4db/unpack_exfor-2024/X4-2024-12-31"
 
+python -c 'import elm; print(f"Running model version: {elm.__version__}")'
+
 # run calibration, with one chain on each available core
 mpirun -n "$SLURM_NTASKS" mcmc \
-    --nsteps 10000 --burnin 1000 --batch_size 100 \
+    --nsteps 20000 --burnin 2000 --batch_size 500 \
     --corpus_path ./nn_corpus.pkl \
     --prior_path ~/elm/elm/prior/prior_distribution.pickle
 
-# Print resource information
-scontrol show job $SLURM_JOB_ID
-js -j $SLURM_JOB_ID
