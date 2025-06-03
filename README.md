@@ -28,7 +28,15 @@ Then install an editable version locally like so:
 pip install -ve .
 ```
 
-It is highly recommended that you use an isolated virtual environment (e.g. using [venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) or [conda/mamba](https://mamba.readthedocs.io/en/latest/)), as this action will install all of the dependencies in `requirements.txt`, at the specific version required.
+Note that `pip` will install package dependencies listed in `requirements.txt`. It is **highly recommended** that you use an isolated virtual environment (e.g. using [venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) or [conda/mamba](https://mamba.readthedocs.io/en/latest/)), as this action will install all of the dependencies in `requirements.txt`, at the specific version required.
+
+If you don't want to create an isolated environment for `elm`, but also don't want `pip` to overwrite the package versions you have with the ones in `requirements.txt`, you can
+
+```
+pip install -ve --no-deps .
+```
+This will require that your current python environment satisfies the `requirements.txt`. 
+
 
 ## usage
 
@@ -78,6 +86,9 @@ v0  = elm.isoscalar(r, *isoscalar_central_params)
 
 and so on.
 
+## Running a calibration
+
+
 Once you've set up your calibration (e.g. by stepping through the notebooks in `prior/`, `data/` and `calibration/`), you can run `mcmc` to run the actual calibration:
 
 ```
@@ -90,7 +101,6 @@ For example, once you've run `calibration/setup_cal.ipynb` to generate the `Corp
 mpirun -n 12 mcmc --nsteps 10000 --burnin 1000  --corpus_path ./calibration/nn_corpus.pkl --prior_path ./prior/prior_distribution.pickle
 
 ```
-,
 
 which will run Metropolis-Hastings with twelve independent chains, 10000 steps each using the supplied prior and corpus of constraints.
 
