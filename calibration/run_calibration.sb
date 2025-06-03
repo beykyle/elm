@@ -4,10 +4,9 @@
 #SBATCH --job-name=nn_elm_cal
 
 # Number of tasks 
-#SBATCH --ntasks=32
+#SBATCH --ntasks=64
 
 # Memory per node
-# Specify "M" or "G" for MB and GB respectively
 #SBATCH --mem=100G
 
 # Wall time
@@ -16,7 +15,6 @@
 #SBATCH --time=8:00:00
 
 # Mail type
-# e.g., which events trigger email notifications
 #SBATCH --mail-type=ALL
 
 # Mail address
