@@ -86,6 +86,9 @@ v0  = elm.isoscalar(r, *isoscalar_central_params)
 
 and so on.
 
+## Running a calibration
+
+
 Once you've set up your calibration (e.g. by stepping through the notebooks in `prior/`, `data/` and `calibration/`), you can run `mcmc` to run the actual calibration:
 
 ```
