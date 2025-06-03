@@ -11,7 +11,7 @@ from jitr.optical_potentials.potential_forms import (
     woods_saxon_safe,
     coulomb_charged_sphere,
 )
-from jitr.utils.constants import ALPHA, HBARC
+from jitr.utils.constants import ALPHA, HBARC, WAVENUMBER_PION
 from jitr import xs
 
 
@@ -101,9 +101,10 @@ def central_form(r, V, W, Wd, R, a, Rd, ad):
     return volume + surface
 
 
-def spin_orbit_form(r, Vso, Wso, R, a, rho):
+def spin_orbit_form(r, Vso, Wso, R, a):
     r"""form of spin-orbit term"""
-    return (Vso + 1j * Wso) * rho**2 * thomas_safe(r, R, a)
+    # extra factor of 2 comes from use of l dot s rather than l dot sigma
+    return 2 * (Vso + 1j * Wso) * (1 / WAVENUMBER_PION)**2 * thomas_safe(r, R, a)
 
 
 def spin_orbit(
@@ -177,16 +178,17 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
+    erg_v = (1 + params["alpha"] / params["V0"] * dE)
     erg_w = dE**2 / (dE**2 + params["gamma_w"] ** 2)
     erg_wd = dE**2 / (dE**2 + params["gamma_d"] ** 2)
 
     # central isoscalar depths
-    V0 = params["V0"]  - params["alpha"] * dE
+    V0 = params["V0"] * erg_v
     W0 = params["W0"] * erg_w
     Wd0 = params["Wd0"] * erg_wd
 
     # central isovector depths
-    V1 = params["V1"] - params["alpha"] * dE
+    V1 = params["V1"] * erg_v
     W1 = params["W1"] * erg_w
     Wd1 = params["Wd1"] * erg_wd
 
@@ -204,17 +206,17 @@ def calculate_parameters(
     #Vso0 = V0 * eta
     # fix at KDUQ value but convert from form using
     # (hbar/mpi c)^2 * l.sigma to 1/r0^2 * (l.s)
-    #Wso0 = -3.1 * params["r0A"] ** 2 / 4
+    #Wso0 = W0 * eta
 
     # spin orbit isovector depths
     #Vso1 = V1 * eta
-    #Wso1 = 0
+    #Wso1 = W1 * eta
 
     return (
         (V0, W0, Wd0, R0, a0, R0, a0),
         (V1, W1, Wd1, R1, a1, R1, a1),
-        (Vso0, Wso0, R0, a0, 1.27),
-        (Vso1, Wso1, R1, a1, 1.27),
+        (Vso0, Wso0, R0, a0),
+        (Vso1, Wso1, R1, a1),
         (Z, RC),
         asym_factor,
     )
