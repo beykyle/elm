@@ -14,7 +14,7 @@ from .model import ElasticModel, ElasticWorkspace
 
 class Corpus:
     """
-    A class to represent a generic collection of constraints.
+    A class to represent a generic collection of independent constraints.
 
     Attributes
     ----------
@@ -149,30 +149,11 @@ class Corpus:
             / self.n_data_pts
         )
 
-    def expected_num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
-        """
-        Compute the empirical coverage within the given interval by taking the
-        expectation value of the number of points within the interval.
-
-        Parameters
-        ----------
-        ylow : np.ndarray
-            Lower bounds of the interval.
-        yhigh : np.ndarray
-            Upper bounds of the interval.
-
-        Returns
-        -------
-        float
-            Empirical coverage within the given interval.
-        """
-        return (
-            sum(
-                constraint.expected_num_pts_within_interval(ylow, yhigh)
-                for constraint in self.constraints
-            )
-            / self.n_data_pts
-        )
+    def model(self, params: OrderedDict):
+        ym = []
+        for c in self.constraints:
+            ym.append(c.model(params))
+        return ym
 
 
 def build_workspaces_from_measurements(

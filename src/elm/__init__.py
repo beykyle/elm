@@ -1,6 +1,6 @@
-from . import elm
 from . import model
 from . import constraint
 from . import corpus
 
-from .__version__ import __version__
+from . import elm
+from . import reaction_constraint

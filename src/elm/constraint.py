@@ -4,15 +4,15 @@ import numpy as np
 
 # from scipy.stats import multivariate_normal
 
-from exfor_tools.distribution import Distribution
 from .model import Model
 
 
-def log_likelihood_cholesky(y, mu, cov):
+def mahalanobis_distance_cholesky(y, mu, cov):
     """
-    Will need this if cov_inv can't be precomputed
+    Returns the Mahalanobis distance between y and mu according to
+    covariance matrix cov, as well as the log determinant of cov, using
+    Cholesky decomposition to factorize cov
     """
-    n = len(y)
     delta = y - mu
 
     # Cholesky decomposition: cov = L @ L.T
@@ -27,6 +27,15 @@ def log_likelihood_cholesky(y, mu, cov):
     # Log determinant: log(det(Sigma)) = 2 * sum(log(diag(L)))
     log_det = 2 * np.sum(np.log(np.diag(L)))
 
+    return mahalanobis, log_det
+
+
+def log_likelihood(mahalanobis: float, log_det: float, n: int):
+    """
+    Returns the log likelihood of a multivariate normal with given
+    mahalanobis distance, log determinant of covariance matrix,
+    and dimension n
+    """
     return -0.5 * (mahalanobis + log_det + n * np.log(2 * np.pi))
 
 
@@ -36,24 +45,26 @@ class Constraint:
     a random variate distributed according to a multivariate normal
     around y with an arbitrary covariance matrix, along with some
     parameteric Model which produces predictions for y given a
-    set of parameters
+    set of parameters.
+
+    In this  base class, the covariance matrix is unspecified. Derived
+    classes must implement the eval_model_and_covariance() method, or
+    otherwise override the chi2() and logpdf() methods.
+
 
     Parameters
     ----------
     y : np.ndarray
         Experimental data output
-    covariance : np.ndarray
-        Covariance matrix.
+    x : np.ndarray
+        Experimental data input
     model: Model
         The parametric model. Must be a callable which takes in an
         OrderedDict of parameters and outputs a np.ndarray of the
         same shape as y
     """
 
-    def __init__(self, y: np.ndarray, covariance: np.ndarray, model: Model):
-        self.y = y
-        if len(self.y.shape) > 1:
-            raise ValueError(f"data must be 1D; y was {len(self.y.shape)}D")
+    def __init__(self, y: np.ndarray, model: Model):
         self.model = model
         self.x = model.x
         if self.x.shape != self.y.shape:
@@ -61,27 +72,6 @@ class Constraint:
                 "Incompatible x and y shapes: " f"{self.x.shape} and {self.y.shape}"
             )
         self.n_data_pts = y.shape[0]
-        if covariance.shape == (self.n_data_pts,):
-            self.covariance = np.diag(covariance)
-        elif covariance.shape == (self.n_data_pts, self.n_data_pts):
-            self.covariance = covariance
-        else:
-            raise ValueError(
-                f"Incompatible covariance matrix shape "
-                f"{covariance.shape} for Constraint with "
-                f"{self.n_data_pts} data points"
-            )
-
-        self.cov_inv = np.linalg.inv(self.covariance)
-        sign, self.log_det = np.linalg.slogdet(self.covariance)
-        if sign != +1:
-            raise ValueError("Invalid covariance matrix! Must be positive definite.")
-
-        # self.y_distribution = multivariate_normal(
-        #    mean=self.y,
-        #    cov=self.covariance,
-        #    allow_singular=False,
-        # )
 
     def residual(self, params: OrderedDict):
         """
@@ -99,6 +89,102 @@ class Constraint:
         """
         ym = self.model(params)
         return self.y - ym
+
+    def num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
+        """
+        Returns the number of points in y that fall between ylow and yhigh,
+        useful for calculating emperical coverages
+
+        Parameters
+        ----------
+        ylow : np.ndarray, same shape as self.y
+        yhigh : np.ndarray, same shape as self.y
+
+        Returns
+        -------
+        int
+        """
+        return int(np.sum(np.logical_and(self.y >= ylow, self.y < yhigh)))
+
+    def model(self, params: OrderedDict):
+        return self.model(params)
+
+    def eval_model_and_covariance(self, params: OrderedDict):
+        pass
+
+    def chi2(self, params: OrderedDict):
+        """
+        Calculate the generalised chi-squared statistic. This is the
+        Malahanobis distance between y and model(params).
+
+        Parameters
+        ----------
+        params : OrderedDict
+            parameters of model
+
+        Returns
+        -------
+        float
+            Chi-squared statistic.
+        """
+        ym, cov = self.eval_model_and_covariance(params)
+        mahalanobis, _ = mahalanobis_distance_cholesky(self.y, ym, cov)
+        return mahalanobis
+
+    def logpdf(self, params: OrderedDict):
+        """
+        Returns the logpdf that the Model, given params, reproduces y
+
+        Parameters
+        ----------
+        params : OrderedDict
+            parameters of model
+
+        Returns
+        -------
+        float
+        """
+        ym, cov = self.eval_model_and_covariance(params)
+        mahalanobis, log_det = mahalanobis_distance_cholesky(self.y, ym, cov)
+        return log_likelihood(mahalanobis, log_det, self.n_data_pts)
+
+
+class FixedCovarianceConstraint(Constraint):
+    """
+    A special case of Constraint in which the covariance matrix is known a
+    priori; e.g. is not dependent on the Model or its params
+
+    Parameters
+    ----------
+    covariance : np.ndarray
+        Covariance matrix.
+    cov_inc : np.ndarray
+        inverse of covariance matrix.
+    log_det : np.ndarray
+        log determinant of covariance matrix
+    """
+
+    def __init__(self, y: np.ndarray, covariance: np.ndarray, model: Model):
+        super().__init__(y, model)
+        if covariance.shape == (self.n_data_pts,):
+            self.covariance = np.diag(covariance)
+        elif covariance.shape == (self.n_data_pts, self.n_data_pts):
+            self.covariance = covariance
+        else:
+            raise ValueError(
+                f"Incompatible covariance matrix shape "
+                f"{covariance.shape} for Constraint with "
+                f"{self.n_data_pts} data points"
+            )
+
+        self.cov_inv = np.linalg.inv(self.covariance)
+        sign, self.log_det = np.linalg.slogdet(self.covariance)
+        if sign != +1:
+            raise ValueError("Invalid covariance matrix! Must be positive definite.")
+
+    def eval_model_and_covariance(self, params: OrderedDict):
+        ym = self.model(params)
+        return ym, self.covariance
 
     def chi2(self, params: OrderedDict):
         """
@@ -131,119 +217,54 @@ class Constraint:
         -------
         float
         """
-
-        # ym = self.model(params)
-        # return self.y_distribution.logpdf(ym)
-        r = self.residual(params)
-        mahalanobis = r.T @ self.cov_inv @ r
+        mahalanobis = self.chi2(params)
         return -0.5 * (mahalanobis + self.log_det + self.n_data_pts * np.log(2 * np.pi))
 
-    def num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
-        """
-        Returns the number of points in y that fall between ylow and yhigh,
-        useful for calculating emperical coverages
 
-        Parameters
-        ----------
-        ylow : np.ndarray, same shape as self.y
-        yhigh : np.ndarray, same shape as self.y
-
-        Returns
-        -------
-        int
-        """
-        return int(np.sum(np.logical_and(self.y >= ylow, self.y < yhigh)))
-
-    def expected_num_pts_within_interval(self, ylow: np.ndarray, yhigh: np.ndarray):
-        """
-        Returns the number of points multiplied by the probability that self.y
-        falls within ylow and yhigh, for a generalized measure of empirical
-        coverage. This is the expectation value of the number of points in
-        y that fall between ylow and yhigh
-
-        Parameters
-        ----------
-        ylow : np.ndarray, same shape as self.y
-        yhigh : np.ndarray, same shape as self.y
-
-        Returns
-        -------
-        float
-        """
-        pass
-        # prob = self.y_distribution.cdf(yhigh) - self.y_distribution.cdf(ylow)
-        # return prob * self.n_data_pts
-
-
-class ReactionConstraint(Constraint):
-    """
-    Represents the constraint determined by a AngularDistribution,
-    with the appropriate covariance matrix given statistical
-    and systematic errors.
-    """
+class ConstraintWithSysError(Constraint):
+    """Constraint in which the systematic error is a constant fraction of y"""
 
     def __init__(
         self,
-        quantity: str,
-        measurement: Distribution,
+        y: np.ndarray,
         model: Model,
-        normalize=None,
-        include_sys_norm_err=True,
-        include_sys_offset_err=True,
-        include_sys_gen_err=True,
+        sys_err_frac: float,
+        model_independent_covariance=None,
     ):
-        """
-        Params:
-        quantity : str
-            The name of the measured quantity
-        measurement : Distribution
-            An object containing the measured values along
-            with their statistical and systematic errors.
-        model : ElasticModel
-            The model to predict the quantity
-        normalize : float, optional
-            A value to normalize the measurements and errors. If None, no
-            normalization is applied. Default is None.
-        include_sys_norm_err : bool, optional
-            If True, includes systematic normalization error in the covariance
-            matrix. Default is True.
-        include_sys_offset_err : bool, optional
-            If True, includes systematic offset error in the covariance matrix.
-            Default is True.
-        include_sys_gen_err : bool, optional
-            If True, includes general systematic error in the covariance
-            matrix. Default is True.
+        super().__init__(y, model)
+        if model_independent_covariance is None:
+            model_independent_covariance = np.zeros(
+                (len(self.y), len(self.y)), dtype=float
+            )
+        self.model_independent_covariance = model_independent_covariance
+        self.sys_err_frac = sys_err_frac
 
-        """
-        self.quantity = quantity
-        self.subentry = measurement.subentry
-        x = np.copy(measurement.x)
-        y = np.copy(measurement.y)
-        stat_err_y = np.copy(measurement.statistical_err)
-        sys_err_norm = np.copy(measurement.systematic_norm_err)
-        sys_err_offset = np.copy(measurement.systematic_offset_err)
-        sys_err_general = np.copy(measurement.general_systematic_err)
+    def eval_model_and_covariance(self, params: OrderedDict):
+        ym = self.model(params)
+        cov = self.model_independent_covariance + self.sys_err_frac * np.outer(ym, ym)
+        return ym, cov
 
-        if normalize is not None:
-            y /= normalize
-            stat_err_y /= normalize
-            sys_err_general /= normalize
-            if sys_err_offset > 0:
-                sys_err_general += sys_err_offset * np.ones_like(x) / normalize
-                sys_err_offset = 0
 
-        covariance = np.diag(stat_err_y**2)
-        if include_sys_norm_err:
-            covariance += np.outer(y, y) * sys_err_norm**2
-        if include_sys_offset_err:
-            n = y.shape[0]
-            covariance += np.ones((n, n)) * sys_err_offset
-        if include_sys_gen_err:
-            covariance += np.outer(sys_err_general, sys_err_general)
+class ConstraintWithUnknownSysError(Constraint):
+    """Constraint in which the fraction of systematic error is a model parameter, should be used with Gibbs sampling"""
 
-        self.stat_err_y = stat_err_y
-        self.sys_err_norm = sys_err_norm
-        self.sys_err_offset = sys_err_offset
-        self.sys_err_general = sys_err_general
+    def __init__(
+        self,
+        y: np.ndarray,
+        model: Model,
+        get_sys_err_from_params,
+        model_independent_covariance=None,
+    ):
+        super().__init__(y, model)
+        if model_independent_covariance is None:
+            model_independent_covariance = np.zeros(
+                (len(self.y), len(self.y)), dtype=float
+            )
+        self.model_independent_covariance = model_independent_covariance
+        self.get_sys_err_from_params = get_sys_err_from_params
 
-        super().__init__(y, covariance, model)
+    def eval_model_and_covariance(self, params: OrderedDict):
+        ym = self.model(params)
+        sys_err_frac = self.get_sys_err_from_params(params)
+        cov = self.model_independent_covariance + sys_err_frac * np.outer(ym, ym)
+        return ym, cov
