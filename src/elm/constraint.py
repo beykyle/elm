@@ -221,7 +221,7 @@ class FixedCovarianceConstraint(Constraint):
         return -0.5 * (mahalanobis + self.log_det + self.n_data_pts * np.log(2 * np.pi))
 
 
-class ConstraintWithSysError(Constraint):
+class ConstraintWithKnownError(Constraint):
     """Constraint in which the systematic error is a constant fraction of y"""
 
     def __init__(
@@ -229,6 +229,7 @@ class ConstraintWithSysError(Constraint):
         y: np.ndarray,
         model: Model,
         sys_err_frac: float,
+        diag_err_frac: float,
         model_independent_covariance=None,
     ):
         super().__init__(y, model)
@@ -238,21 +239,30 @@ class ConstraintWithSysError(Constraint):
             )
         self.model_independent_covariance = model_independent_covariance
         self.sys_err_frac = sys_err_frac
+        self.diag_err_frac = diag_err_frac
 
     def eval_model_and_covariance(self, params: OrderedDict):
         ym = self.model(params)
-        cov = self.model_independent_covariance + self.sys_err_frac * np.outer(ym, ym)
+        cov = (
+            self.model_independent_covariance
+            + self.sys_err_frac * np.outer(ym, ym)
+            + self.diag_err_frac * np.diag(ym**2)
+        )
         return ym, cov
 
 
-class ConstraintWithUnknownSysError(Constraint):
-    """Constraint in which the fraction of systematic error is a model parameter, should be used with Gibbs sampling"""
+class ConstraintWithUnknownError(Constraint):
+    """
+    Constraint for arbitrary covariance model, in which a callable `get_model_y_and_cov`
+    is passed in to handle determination of the covariance and model prediction for a
+    given parameter
+    """
 
     def __init__(
         self,
         y: np.ndarray,
         model: Model,
-        get_sys_err_from_params,
+        get_model_y_and_cov,
         model_independent_covariance=None,
     ):
         super().__init__(y, model)
@@ -260,11 +270,8 @@ class ConstraintWithUnknownSysError(Constraint):
             model_independent_covariance = np.zeros(
                 (len(self.y), len(self.y)), dtype=float
             )
-        self.model_independent_covariance = model_independent_covariance
-        self.get_sys_err_from_params = get_sys_err_from_params
+        self.get_model_y_and_cov = get_model_y_and_cov
 
     def eval_model_and_covariance(self, params: OrderedDict):
-        ym = self.model(params)
-        sys_err_frac = self.get_sys_err_from_params(params)
-        cov = self.model_independent_covariance + sys_err_frac * np.outer(ym, ym)
+        ym, cov = self.get_model_y_and_cov(self, params)
         return ym, cov
