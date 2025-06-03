@@ -104,7 +104,7 @@ def central_form(r, V, W, Wd, R, a, Rd, ad):
 def spin_orbit_form(r, Vso, Wso, R, a):
     r"""form of spin-orbit term"""
     # extra factor of 2 comes from use of l dot s rather than l dot sigma
-    return 2 * (Vso + 1j * Wso) * (1 / WAVENUMBER_PION)**2 * thomas_safe(r, R, a)
+    return 2 * (Vso + 1j * Wso) * (1 / WAVENUMBER_PION) ** 2 * thomas_safe(r, R, a)
 
 
 def spin_orbit(
@@ -178,7 +178,7 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = (1 + params["alpha"] / params["V0"] * dE)
+    erg_v = 1 + params["alpha"] / params["V0"] * dE
     erg_w = dE**2 / (dE**2 + params["gamma_w"] ** 2)
     erg_wd = dE**2 / (dE**2 + params["gamma_d"] ** 2)
 
@@ -194,7 +194,7 @@ def calculate_parameters(
 
     # spin orbit depths are just a fixed ratio (eta) of central depths
     # for now, keep this fixed
-    #eta = 0.44  # params["eta"]
+    # eta = 0.44  # params["eta"]
 
     # alternative option just fixing all so depths to be A,E independent:
     Vso0 = 5.58
@@ -203,14 +203,14 @@ def calculate_parameters(
     Wso1 = 0
 
     # spin orbit isovector depths
-    #Vso0 = V0 * eta
+    # Vso0 = V0 * eta
     # fix at KDUQ value but convert from form using
     # (hbar/mpi c)^2 * l.sigma to 1/r0^2 * (l.s)
-    #Wso0 = W0 * eta
+    # Wso0 = W0 * eta
 
     # spin orbit isovector depths
-    #Vso1 = V1 * eta
-    #Wso1 = W1 * eta
+    # Vso1 = V1 * eta
+    # Wso1 = W1 * eta
 
     return (
         (V0, W0, Wd0, R0, a0, R0, a0),
