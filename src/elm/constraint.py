@@ -65,6 +65,7 @@ class Constraint:
     """
 
     def __init__(self, y: np.ndarray, model: Model):
+        self.y = y
         self.model = model
         self.x = model.x
         if self.x.shape != self.y.shape:
