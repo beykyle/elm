@@ -101,7 +101,6 @@ For example, once you've run `calibration/setup_cal.ipynb` to generate the `Corp
 mpirun -n 12 mcmc --nsteps 10000 --burnin 1000  --corpus_path ./calibration/nn_corpus.pkl --prior_path ./prior/prior_distribution.pickle
 
 ```
-,
 
 which will run Metropolis-Hastings with twelve independent chains, 10000 steps each using the supplied prior and corpus of constraints.
 
