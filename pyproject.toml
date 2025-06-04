@@ -23,8 +23,4 @@ where = ["src"]
 dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools_scm]
-write_to = "src/__version__.py"
-
-# Specify the console script entry point
-[project.scripts]
-mcmc = "calibration.mcmc:main"
+write_to = "src/elm/__version__.py"
