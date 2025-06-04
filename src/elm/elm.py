@@ -1,18 +1,17 @@
 from collections import OrderedDict
-from json import load, dumps
+from json import dumps, load
 from pathlib import Path
 
-import pandas as pd
 import numpy as np
-
+import pandas as pd
+from jitr import xs
 from jitr.optical_potentials.potential_forms import (
+    coulomb_charged_sphere,
     thomas_safe,
     woods_saxon_prime_safe,
     woods_saxon_safe,
-    coulomb_charged_sphere,
 )
 from jitr.utils.constants import ALPHA, HBARC, WAVENUMBER_PION
-from jitr import xs
 
 
 class Parameter:
@@ -62,8 +61,8 @@ def read_sample_from_json(fpath: Path):
     try:
         with open(fpath, "r") as file:
             return load(file, object_pairs_hook=OrderedDict)
-    except IOError:
-        raise f"Error: failed to open {fpath}"
+    except IOError as exc:
+        raise ValueError(f"Error: failed to open {fpath}") from exc
 
 
 def array_to_list(samples: np.ndarray):
