@@ -25,8 +25,8 @@ params = [
     #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
     Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
-    Parameter("r0", np.float64, r"fm", r"r_0"),
-    Parameter("r1", np.float64, r"fm", r"r_1"),
+    #Parameter("r0", np.float64, r"fm", r"r_0"),
+    #Parameter("r1", np.float64, r"fm", r"r_1"),
     Parameter("r0A", np.float64, r"fm", r"r_{0A}"),
     Parameter("r1A", np.float64, r"fm", r"r_{1A}"),
     Parameter("a0", np.float64, r"fm", r"a_0"),
@@ -113,8 +113,8 @@ def calculate_parameters(
     asym_factor *= (-1) ** (Zp)
 
     # geometries
-    R0 = params["r0"] + params["r0A"] * A ** (1.0 / 3.0)
-    R1 = params["r1"] + params["r1A"] * A ** (1.0 / 3.0)
+    R0 = -0.2 + params["r0A"] * A ** (1.0 / 3.0)
+    R1 = -0.2 + params["r1A"] * A ** (1.0 / 3.0)
     a0 = params["a0"]
     a1 = params["a1"]
 
