@@ -45,5 +45,5 @@ mpirun -n "$SLURM_NTASKS" mcmc \
     --nsteps 20000 --burnin 2000 --batch_size 500 \
     --proposal_cov_scale_factor 10000 \
     --corpus_path ./nn_corpus.pkl \
-    --prior_path ~/elm/elm/prior/prior_distribution.pickle
+    --prior_path ../prior/prior_distribution.pickle
 
