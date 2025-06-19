@@ -1,7 +1,7 @@
 import numpy as np
 
 from rxmc.params import Parameter
-from .elm import coulomb_correction
+from .model_form import coulomb_correction
 
 params = [
     Parameter("V0", np.float64, r"MeV", r"V_0"),
@@ -12,7 +12,7 @@ params = [
     Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
     #   Parameter("eta", np.float64, r"dimensionless", r"\eta"),
     Parameter("alpha", np.float64, r"dimensionless", r"\alpha"),
-    #   Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
+    Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
     Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
     # Parameter("r0", np.float64, r"fm", r"r_0"),
@@ -31,19 +31,20 @@ def calculate_parameters(
     target: tuple,
     E: float,
     Ef: float,
-    V0,
-    W0,
-    Wd0,
-    V1,
-    W1,
-    Wd1,
-    alpha,
-    gamma_w,
-    gamma_d,
-    r0A,
-    r1A,
-    a0,
-    a1,
+    V0: float,
+    W0: float,
+    Wd0: float,
+    V1: float,
+    W1: float,
+    Wd1: float,
+    alpha: float,
+    beta: float,
+    gamma_w: float,
+    gamma_d: float,
+    r0A: float,
+    r1A: float,
+    a0: float,
+    a1: float,
 ):
     r"""Calculate the parameters in the ELM for a given target isotope
     and energy, given a subparameter sample
@@ -52,7 +53,20 @@ def calculate_parameters(
         target (tuple): target A,Z
         E (float): center-of-mass frame energy
         Ef  (float): Fermi energy for A,Z nucleus
-        params (OrderedDict) : subparameter sample
+        V0 (float): central isoscalar depth
+        W0 (float): central isoscalar surface depth
+        Wd0 (float): central isoscalar derivative depth
+        V1 (float): central isovector depth
+        W1 (float): central isovector surface depth
+        Wd1 (float): central isovector derivative depth
+        alpha (float): 1st order energy dependence
+        beta (float): 2nd order energy dependence
+        gamma_w (float): energy dependence parameter for W
+        gamma_d (float): energy dependence parameter for Wd
+        r0A (float): radius parameter for central isoscalar potential
+        r1A (float): radius parameter for central isovector potential
+        a0 (float): surface diffuseness parameter for central isoscalar potential
+        a1 (float): surface diffuseness parameter for central isovector potential
     Returns:
         central isoscalar_params (tuple): (V0, W0, Wd0, R0, a0, Rd, ad)
         central isovector_params (tuple): (V1, W1, Wd1, R1, a1, Rd1, ad1)
@@ -81,7 +95,7 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = 1 + alpha / V0 * dE
+    erg_v = (1 + alpha * dE + beta * dE**2) / V0
     erg_w = dE**2 / (dE**2 + gamma_w**2)
     erg_wd = dE**2 / (dE**2 + gamma_d**2)
 

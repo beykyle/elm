@@ -1,5 +1,5 @@
-from .model_form import calculate_parameters
-from .elm import coulomb_charged_sphere, central, central_plus_coulomb, spin_orbit
+from .elm import calculate_parameters
+from .model_form import coulomb_charged_sphere, central, central_plus_coulomb, spin_orbit
 from jitr import xs
 
 
