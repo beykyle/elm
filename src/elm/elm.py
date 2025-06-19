@@ -95,7 +95,7 @@ def calculate_parameters(
         dE -= coulomb_correction(A, Z, RC)
 
     # energy dependence of depths
-    erg_v = (1 + alpha * dE + beta * dE**2) / V0
+    erg_v = 1 + (alpha * dE + beta * dE**2) / V0
     erg_w = dE**2 / (dE**2 + gamma_w**2)
     erg_wd = dE**2 / (dE**2 + gamma_d**2)
 
