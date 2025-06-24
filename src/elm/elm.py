@@ -134,6 +134,6 @@ def calculate_parameters(
         (V1, W1, Wd1, R1, a1, R1, a1),
         (Vso0, Wso0, R0, a0),
         (Vso1, Wso1, R1, a1),
-        (Z, RC),
+        (Z*Zp, RC),
         asym_factor,
     )
