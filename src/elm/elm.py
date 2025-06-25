@@ -11,8 +11,8 @@ params = [
     Parameter("W1", np.float64, r"MeV", r"W_1"),
     Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
     #   Parameter("eta", np.float64, r"dimensionless", r"\eta"),
-    Parameter("alpha", np.float64, r"dimensionless", r"\alpha"),
-    Parameter("beta", np.float64, r"MeV$^{-2}$", r"\beta"),
+    Parameter("alpha", np.float64, r"no-dim", r"\alpha"),
+    Parameter("beta", np.float64, r"MeV^{-1}", r"\beta"),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
     Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
     # Parameter("r0", np.float64, r"fm", r"r_0"),
@@ -83,21 +83,26 @@ def calculate_parameters(
     asym_factor *= (-1) ** (Zp)
 
     # geometries
-    R0 = -0.2 + r0A * A ** (1.0 / 3.0)
-    R1 = -0.2 + r1A * A ** (1.0 / 3.0)
+    #R0 = -0.2 + r0A * A ** (1.0 / 3.0)
+    #R1 = -0.2 + r1A * A ** (1.0 / 3.0)
+    R0 = r0A * A ** (1.0 / 3.0)
+    R1 = r1A * A ** (1.0 / 3.0)
 
     # Coulomb radius equal to central isoscalar radius
     RC = R0
 
     # energy
-    dE = E - Ef
+    dE = E
+    # dE = E - Ef
     if projectile == (1, 1):
-        dE -= coulomb_correction(A, Z, RC)
+        deltaVC = coulomb_correction(A, Z, RC)
+        # dE -= deltaVC
 
     # energy dependence of depths
     erg_v = 1 + (alpha * dE + beta * dE**2) / V0
     erg_w = dE**2 / (dE**2 + gamma_w**2)
-    erg_wd = dE**2 / (dE**2 + gamma_d**2)
+    # erg_wd = dE**2 / (dE**2 + gamma_d**2)
+    erg_wd = dE**2 / (dE**2 + gamma_d**2)* np.exp(-dE / gamma_d)
 
     # central isoscalar depths
     V0 = V0 * erg_v
@@ -113,12 +118,6 @@ def calculate_parameters(
     # for now, keep this fixed
     # eta = 0.44  # eta
 
-    # alternative option just fixing all so depths to be A,E independent:
-    Vso0 = 5.58
-    Wso0 = 0
-    Vso1 = 0
-    Wso1 = 0
-
     # spin orbit isovector depths
     # Vso0 = V0 * eta
     # fix at KDUQ value but convert from form using
@@ -128,6 +127,12 @@ def calculate_parameters(
     # spin orbit isovector depths
     # Vso1 = V1 * eta
     # Wso1 = W1 * eta
+
+    # alternative option just fixing all so depths to be A,E independent:
+    Vso0 = 5.58
+    Wso0 = 0
+    Vso1 = 0
+    Wso1 = 0
 
     return (
         (V0, W0, Wd0, R0, a0, R0, a0),
