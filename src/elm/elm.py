@@ -12,7 +12,7 @@ params = [
     Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
     #   Parameter("eta", np.float64, r"dimensionless", r"\eta"),
     Parameter("alpha", np.float64, r"no-dim", r"\alpha"),
-    Parameter("beta", np.float64, r"MeV^{-1}", r"\beta"),
+    Parameter("beta", np.float64, r"1/MeV", r"\beta"),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
     Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
     # Parameter("r0", np.float64, r"fm", r"r_0"),
