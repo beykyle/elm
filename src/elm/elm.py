@@ -4,14 +4,14 @@ from rxmc.params import Parameter
 from .model_form import coulomb_correction
 
 params = [
-    Parameter("V0", np.float64, r"MeV", r"V_0", bounds=(40, 60)),
+    Parameter("V0", np.float64, r"MeV", r"V_0", bounds=(30, 80)),
     Parameter("W0", np.float64, r"MeV", r"W_0", bounds=(0, 30)),
     Parameter("Wd0", np.float64, r"MeV", r"W_{D0}", bounds=(20, 50)),
     Parameter("V1", np.float64, r"MeV", r"V_1", bounds=(0, 60)),
-    Parameter("W1", np.float64, r"MeV", r"W_1", bounds=(-10, 20)),
-    Parameter("Wd1", np.float64, r"MeV", r"W_{D1}", bounds=(0, 50)),
+    Parameter("W1", np.float64, r"MeV", r"W_1", bounds=(-10, 60)),
+    Parameter("Wd1", np.float64, r"MeV", r"W_{D1}", bounds=(-10, 60)),
     #   Parameter("eta", np.float64, r"dimensionless", r"\eta"),
-    Parameter("alpha", np.float64, r"no-dim", r"\alpha", bounds=(-0.3, -0.4)),
+    Parameter("alpha", np.float64, r"no-dim", r"\alpha", bounds=(-0.4, -0.3)),
     Parameter("beta", np.float64, r"1/MeV", r"\beta", bounds=(-0.01, 0.01)),
     Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W", bounds=(10, 60)),
     Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D", bounds=(10, 60)),
