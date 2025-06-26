@@ -4,23 +4,23 @@ from rxmc.params import Parameter
 from .model_form import coulomb_correction
 
 params = [
-    Parameter("V0", np.float64, r"MeV", r"V_0"),
-    Parameter("W0", np.float64, r"MeV", r"W_0"),
-    Parameter("Wd0", np.float64, r"MeV", r"W_{D0}"),
-    Parameter("V1", np.float64, r"MeV", r"V_1"),
-    Parameter("W1", np.float64, r"MeV", r"W_1"),
-    Parameter("Wd1", np.float64, r"MeV", r"W_{D1}"),
+    Parameter("V0", np.float64, r"MeV", r"V_0", bounds=(40, 60)),
+    Parameter("W0", np.float64, r"MeV", r"W_0", bounds=(0, 30)),
+    Parameter("Wd0", np.float64, r"MeV", r"W_{D0}", bounds=(20, 50)),
+    Parameter("V1", np.float64, r"MeV", r"V_1", bounds=(0, 60)),
+    Parameter("W1", np.float64, r"MeV", r"W_1", bounds=(-10, 20)),
+    Parameter("Wd1", np.float64, r"MeV", r"W_{D1}", bounds=(0, 50)),
     #   Parameter("eta", np.float64, r"dimensionless", r"\eta"),
-    Parameter("alpha", np.float64, r"no-dim", r"\alpha"),
-    Parameter("beta", np.float64, r"1/MeV", r"\beta"),
-    Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W"),
-    Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D"),
+    Parameter("alpha", np.float64, r"no-dim", r"\alpha", bounds=(-0.3, -0.4)),
+    Parameter("beta", np.float64, r"1/MeV", r"\beta", bounds=(-0.01, 0.01)),
+    Parameter("gamma_w", np.float64, r"MeV", r"\gamma_W", bounds=(10, 60)),
+    Parameter("gamma_d", np.float64, r"MeV", r"\gamma_D", bounds=(10, 60)),
     # Parameter("r0", np.float64, r"fm", r"r_0"),
     # Parameter("r1", np.float64, r"fm", r"r_1"),
-    Parameter("r0A", np.float64, r"fm", r"r_{0A}"),
-    Parameter("r1A", np.float64, r"fm", r"r_{1A}"),
-    Parameter("a0", np.float64, r"fm", r"a_0"),
-    Parameter("a1", np.float64, r"fm", r"a_1"),
+    Parameter("r0A", np.float64, r"fm", r"r_{0A}", bounds=(0.9, 1.5)),
+    Parameter("r1A", np.float64, r"fm", r"r_{1A}", bounds=(0.9, 1.5)),
+    Parameter("a0", np.float64, r"fm", r"a_0", bounds=(0.4, 1.0)),
+    Parameter("a1", np.float64, r"fm", r"a_1", bounds=(0.4, 1.0)),
 ]
 params_dtype = [(p.name, p.dtype) for p in params]
 NUM_PARAMS = len(params)
@@ -83,8 +83,8 @@ def calculate_parameters(
     asym_factor *= (-1) ** (Zp)
 
     # geometries
-    #R0 = -0.2 + r0A * A ** (1.0 / 3.0)
-    #R1 = -0.2 + r1A * A ** (1.0 / 3.0)
+    # R0 = -0.2 + r0A * A ** (1.0 / 3.0)
+    # R1 = -0.2 + r1A * A ** (1.0 / 3.0)
     R0 = r0A * A ** (1.0 / 3.0)
     R1 = r1A * A ** (1.0 / 3.0)
 
@@ -102,7 +102,7 @@ def calculate_parameters(
     erg_v = 1 + (alpha * dE + beta * dE**2) / V0
     erg_w = dE**2 / (dE**2 + gamma_w**2)
     # erg_wd = dE**2 / (dE**2 + gamma_d**2)
-    erg_wd = dE**2 / (dE**2 + gamma_d**2)* np.exp(-dE / gamma_d)
+    erg_wd = dE**2 / (dE**2 + gamma_d**2) * np.exp(-dE / gamma_d)
 
     # central isoscalar depths
     V0 = V0 * erg_v
@@ -139,6 +139,6 @@ def calculate_parameters(
         (V1, W1, Wd1, R1, a1, R1, a1),
         (Vso0, Wso0, R0, a0),
         (Vso1, Wso1, R1, a1),
-        (Z*Zp, RC),
+        (Z * Zp, RC),
         asym_factor,
     )
