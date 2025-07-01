@@ -16,8 +16,7 @@ def central_form(r, V, W, Wd, R, a, Rd, ad):
 
 def spin_orbit_form(r, Vso, Wso, R, a):
     r"""form of spin-orbit term"""
-    # extra factor of 2 comes from use of l dot s rather than l dot sigma
-    return 2 * (Vso + 1j * Wso) * (1 / WAVENUMBER_PION) ** 2 * thomas_safe(r, R, a)
+    return (Vso + 1j * Wso) / WAVENUMBER_PION ** 2 * thomas_safe(r, R, a)
 
 
 def spin_orbit(

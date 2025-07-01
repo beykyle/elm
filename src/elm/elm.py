@@ -80,7 +80,7 @@ def calculate_parameters(
     Ap, Zp = projectile
     assert Ap == 1 and (Zp == 1 or Zp == 0)
     asym_factor = (A - 2 * Z) / (A)
-    asym_factor *= (-1) ** (Zp)
+    asym_factor *= (-1) ** (Zp + 1) # -1 for neutrons, +1 for protons
 
     # geometries
     # R0 = -0.2 + r0A * A ** (1.0 / 3.0)
