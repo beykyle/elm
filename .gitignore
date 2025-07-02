@@ -15,6 +15,7 @@ __pycache__/
 # outputs
 *.pkl
 *.npy
+*.xz
 
 # Distribution / packaging
 .Python
