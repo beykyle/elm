@@ -6,8 +6,6 @@ from mpi4py import MPI
 import argparse
 import numpy as np
 
-gather = False
-
 
 def main():
     # Argument parser setup
