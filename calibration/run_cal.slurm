@@ -41,6 +41,11 @@ export X43I_DATAPATH="/mnt/home/beyerkyl/x4db/unpack_exfor-2024/X4-2024-12-31"
 python -c 'import elm; print(f"Running model version: {elm.__version__}")'
 
 # run calibration, with one chain on each available core
-mpirun -np $SLURM_NTASKS python3 ./run_cal.py --input ./walker.xz --steps 10000 --burnin 1000 --verbose --output ./all_walkers.xz
+mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
+  --input ./walker.xz \
+  --steps 10000 \
+  --burnin 1000 \
+  --verbose \
+  --output ./all_walkers.xz
 
 
