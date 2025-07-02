@@ -4,6 +4,9 @@ import lzma
 import dill as pickle
 from mpi4py import MPI
 import argparse
+import numpy as np
+
+gather = False
 
 
 def main():
@@ -30,35 +33,33 @@ def main():
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
-    # Rank 0 loads the initial walker data
-    if rank == 0:
-        with lzma.open(args.input, "rb") as f:
-            walker = pickle.load(f)
-    else:
-        walker = None
+    # All ranks just read the input file
+    # rather than broadcasting
+    with lzma.open(args.input, "rb") as f:
+        walker = pickle.load(f)
 
-    # Broadcast walker object to all processes
-    walker = comm.bcast(walker, root=0)
+    # set rng seed for each walker
+    walker.rng = np.random.default_rng(rank)
 
-    # Each process performs its walk
+    # Each process performs its own independent walk
     acc_frac = walker.walk(
         n_steps=args.steps,
         burnin=args.burnin,
         verbose=args.verbose,
     )
 
-    # Gather all walkers at rank 0
-    all_walkers = comm.gather(walker, root=0)
-
     # Gather acceptance fractions at rank 0
     acc_fracs = comm.gather(acc_frac, root=0)
 
-    # Rank 0 saves the results
+    # Rank0 prints acceptance fractions
     if rank == 0:
         acs = ", ".join([f"{a:1.2f}" for a in acc_fracs])
         print(f"acceptance fractions: {acs}")
-        with lzma.open(args.output, "wb") as f:
-            pickle.dump(all_walkers, f)
+
+    # Finally, just have each rank save its own walker
+    # rather than gathering them all
+    with lzma.open(f"./walker_{rank}.xz", "wb") as f:
+        pickle.dump(walker, f)
 
 
 if __name__ == "__main__":
