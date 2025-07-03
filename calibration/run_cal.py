@@ -2,8 +2,8 @@
 
 import argparse
 import lzma
-import os
 import sys
+from pathlib import Path
 
 import dill as pickle
 import numpy as np
@@ -15,7 +15,11 @@ def main():
     walker provided as input"""
 
     parser = argparse.ArgumentParser(description="Run a parallel walker simulation.")
-    parser.add_argument("--input", type=str, help="Input file path for walker data.")
+    parser.add_argument(
+        "--input",
+        type=str,
+        help="Input file path for walker; expected to be an lzma-compressed pickle file",
+    )
     parser.add_argument(
         "--output",
         type=str,
@@ -26,7 +30,7 @@ def main():
         "--steps", type=int, default=10000, help="Number of walking steps."
     )
     parser.add_argument(
-        "--batch_size", type=int, default=1000, help="Batch size for walker."
+        "--batch_size", type=int, default=None, help="Batch size for walker."
     )
     parser.add_argument(
         "--burnin", type=int, default=1000, help="Number of burn-in steps."
@@ -36,14 +40,14 @@ def main():
     args = parser.parse_args()
 
     # Verify that the input file exists
-    if not os.path.isfile(args.input):
+    input_path = Path(args.input)
+    if not input_path.is_file():
         print(f"Error: The input file '{args.input}' does not exist.")
         sys.exit(1)
 
     # Ensure output directory exists
-    if not os.path.isdir(args.output):
-        print(f"Error: The output directory '{args.output}' does not exist.")
-        sys.exit(1)
+    output_path = Path(args.output)
+    output_path.mkdir(parents=True, exist_ok=True)
 
     # Initialize MPI
     comm = MPI.COMM_WORLD
@@ -51,7 +55,7 @@ def main():
 
     # Read input file
     try:
-        with lzma.open(args.input, "rb") as f:
+        with lzma.open(input_path, "rb") as f:
             walker = pickle.load(f)
     except Exception as e:
         print(
@@ -69,6 +73,7 @@ def main():
         sys.exit(1)
 
     # Run the walker for the specified number of steps
+    print(f"walking on rank {rank}...")
     try:
         acc_frac = walker.walk(
             n_steps=args.steps,
@@ -94,7 +99,7 @@ def main():
 
     # Write walker object to disk from each rank if requested
     try:
-        with lzma.open(f"{args.output}/walkers_{rank}.pkl.xz", "wb") as f:
+        with lzma.open(output_path / f"walkers_{rank}.pkl.xz", "wb") as f:
             pickle.dump(walker, f)
     except Exception as e:
         print(f"Error: Failed to write walker to disk on rank {rank}. Exception: {e}")

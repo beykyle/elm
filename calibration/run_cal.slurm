@@ -1,7 +1,7 @@
 #!/bin/bash --login
 
 # Job name:
-#SBATCH --job-name=elm_cal_og
+#SBATCH --job-name=elm_cal_og_production
 
 # Number of tasks 
 #SBATCH --ntasks=64
@@ -12,7 +12,7 @@
 # Wall time
 # Format: "minutes", "hours:minutes:seconds", 
 # "days-hours", or "days-hours:minutes"
-#SBATCH --time=12:00:00
+#SBATCH --time=24:00:00
 
 # Mail type
 #SBATCH --mail-type=ALL
@@ -31,8 +31,6 @@ module purge
 module load Miniforge3/24.3.0-0
 
 ## activate the mamba environment for this job
-conda activate /mnt/ffs24/home/beyerkyl/local_conda_pkgfiles
-eval "$(mamba shell hook --shell bash)"
 mamba activate elm
 
 ## set any env variables we need
@@ -40,13 +38,16 @@ export X43I_DATAPATH="/mnt/home/beyerkyl/x4db/unpack_exfor-2024/X4-2024-12-31"
 
 python -c 'import elm; print(f"Running model version: {elm.__version__}")'
 
+# output directory
+OUTPUT_DIR=$SLURM_JOB_NAME
+mkdir -p $OUTPUT_DIR
+
 # run calibration, with one chain on each available core
-#mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
-#  --input ./walker.xz \
-#  --steps 10000 \
-#  --burnin 1000 \
-#  --verbose \
-#  --output ./
+mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
+  --input ./walker.xz \
+  --steps 100000 \
+  --burnin 10000 \
+  --output $OUTPUT_DIR
 
 # gather and write the results to a single file
-mpirun -np $SLURM_NTASKS python3 ./gather_walkers.py --input ./
+mpirun -np $SLURM_NTASKS python3 ./gather_walkers.py --input $OUTPUT_DIR
