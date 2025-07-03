@@ -1,7 +1,7 @@
 #!/bin/bash --login
 
 # Job name:
-#SBATCH --job-name=nn_elm_cal
+#SBATCH --job-name=elm_cal_og
 
 # Number of tasks 
 #SBATCH --ntasks=64
@@ -12,7 +12,7 @@
 # Wall time
 # Format: "minutes", "hours:minutes:seconds", 
 # "days-hours", or "days-hours:minutes"
-#SBATCH --time=8:00:00
+#SBATCH --time=12:00:00
 
 # Mail type
 #SBATCH --mail-type=ALL
@@ -41,11 +41,12 @@ export X43I_DATAPATH="/mnt/home/beyerkyl/x4db/unpack_exfor-2024/X4-2024-12-31"
 python -c 'import elm; print(f"Running model version: {elm.__version__}")'
 
 # run calibration, with one chain on each available core
-mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
-  --input ./walker.xz \
-  --steps 10000 \
-  --burnin 1000 \
-  --verbose \
-  --output ./all_walkers.xz
+#mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
+#  --input ./walker.xz \
+#  --steps 10000 \
+#  --burnin 1000 \
+#  --verbose \
+#  --output ./
 
-
+# gather and write the results to a single file
+mpirun -np $SLURM_NTASKS python3 ./gather_walkers.py --input ./

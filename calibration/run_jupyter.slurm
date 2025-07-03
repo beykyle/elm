@@ -1,7 +1,8 @@
 #!/bin/bash --login
 #SBATCH --nodes 1
-#SBATCH --cpus-per-task 5
+#SBATCH --cpus-per-task 12
 #SBATCH --time 03:00:00
+#SBATCH --mem 64G
 #SBATCH --job-name jupyter-notebook
 #SBATCH -o /mnt/home/beyerkyl/jupyter_log/jupyter-notebook-%J.log
 #SBATCH -e /mnt/home/beyerkyl/jupyter_log/jupyter-notebook-%J.log
