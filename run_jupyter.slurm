@@ -25,3 +25,11 @@ export X43I_DATAPATH="/mnt/home/beyerkyl/x4db/unpack_exfor-2024/X4-2024-12-31"
 
 # run jupyter lab
 jupyter-lab --no-browser --port=${port} --ip=${node}
+
+# Print out the tunneling info
+echo "To access the Jupyter Lab, run the following command on your local machine:"
+echo "ssh -N -L ${port}:${node}:${port} ${user}@$(hostname -s)"
+
+# Print out the URL to access Jupyter Lab
+url = "http://localhost:9999/lab?token=$(jupyter-lab list | grep -oP '(?<=token=)[^ ]+')"
+echo "You can access Jupyter Lab at: $url"
