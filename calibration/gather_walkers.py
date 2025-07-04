@@ -35,7 +35,7 @@ def main():
 
     # Read input file
     try:
-        with lzma.open(f"{args.input}/walker_{rank}.xz", "rb") as f:
+        with lzma.open(f"{args.input}/walker_{rank}.pkl.xz", "rb") as f:
             walker = pickle.load(f)
     except Exception as e:
         print(
