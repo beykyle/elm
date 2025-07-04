@@ -99,7 +99,7 @@ def main():
 
     # Write walker object to disk from each rank if requested
     try:
-        with lzma.open(output_path / f"walkers_{rank}.pkl.xz", "wb") as f:
+        with lzma.open(output_path / f"walker_{rank}.pkl.xz", "wb") as f:
             pickle.dump(walker, f)
     except Exception as e:
         print(f"Error: Failed to write walker to disk on rank {rank}. Exception: {e}")
