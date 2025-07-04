@@ -4,8 +4,7 @@
 #SBATCH --time 03:00:00
 #SBATCH --mem 64G
 #SBATCH --job-name jupyter-notebook
-#SBATCH -o /mnt/home/beyerkyl/jupyter_log/jupyter-notebook-%J.log
-#SBATCH -e /mnt/home/beyerkyl/jupyter_log/jupyter-notebook-%J.log
+#SBATCH --output /mnt/home/beyerkyl/jupyter_log/jupyter-notebook-%J.log
 
 # get tunneling info
 
