@@ -41,9 +41,9 @@ def main():
     if not input_path.is_dir():
         print(f"Error: The input directory '{args.input}' does not exist.")
         sys.exit(1)
-    
+
     # Read input file
-    input_file = input_path / f"walker_{rank}.pkl.xz"
+    input_file = input_path / f"walkers_{rank}.pkl.xz"
     try:
         with lzma.open(input_file, "rb") as f:
             walker = pickle.load(f)
@@ -52,7 +52,7 @@ def main():
             f"Error: Failed to read input file '{ininput_file}' on rank {rank}. Exception: {e}"
         )
         sys.exit(1)
-    
+
     # Ensure output directory exists
     output_path = Path(args.output)
     output_path.mkdir(parents=True, exist_ok=True)
