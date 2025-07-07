@@ -46,6 +46,7 @@ mpirun -np $SLURM_NTASKS python3 ./continue_cal.py \
   --input  $INPUT_DIR \
   --steps 100000 \
   --burnin 0 \
+  --verbose \
 
 # gather and write the results to a single file
 mpirun -np $SLURM_NTASKS python3 ./gather_walkers.py --input $INPUT_DIR

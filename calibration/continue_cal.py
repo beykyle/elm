@@ -6,12 +6,11 @@ import sys
 from pathlib import Path
 
 import dill as pickle
-import numpy as np
 from mpi4py import MPI
 
 
 def main():
-    """Read walkers in parallel, advance thier state, and overwrite them """
+    """Read walkers in parallel, advance thier state, and overwrite them"""
 
     # Initialize MPI
     comm = MPI.COMM_WORLD
@@ -22,17 +21,13 @@ def main():
         "--input",
         type=str,
         help="Input directory expected to containt one file called walker_{rank}.pkl.xz"
-            " for each rank, each one being an LZMA-compressed walker object.",
+        " for each rank, each one being an LZMA-compressed walker object.",
     )
-    parser.add_argument(
-        "--steps", type=int,  help="Number of walking steps."
-    )
+    parser.add_argument("--steps", type=int, help="Number of walking steps.")
     parser.add_argument(
         "--batch_size", type=int, default=None, help="Batch size for walker."
     )
-    parser.add_argument(
-        "--burnin", type=int,  help="Number of burn-in steps."
-    )
+    parser.add_argument("--burnin", type=int, help="Number of burn-in steps.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose mode.")
 
     args = parser.parse_args()
@@ -43,19 +38,16 @@ def main():
         sys.exit(1)
 
     # Read input file
+    # TODO change name from walkers to walker
     input_file = input_path / f"walkers_{rank}.pkl.xz"
     try:
         with lzma.open(input_file, "rb") as f:
             walker = pickle.load(f)
     except Exception as e:
         print(
-            f"Error: Failed to read input file '{ininput_file}' on rank {rank}. Exception: {e}"
+            f"Error: Failed to read input file '{input_file}' on rank {rank}. Exception: {e}"
         )
         sys.exit(1)
-
-    # Ensure output directory exists
-    output_path = Path(args.output)
-    output_path.mkdir(parents=True, exist_ok=True)
 
     # Run the walker for the specified number of steps
     print(f"walking on rank {rank}...")
@@ -84,7 +76,7 @@ def main():
 
     # Write walker object to disk from each rank
     try:
-        with lzma.open(output_path / f"walker_{rank}.pkl.xz", "wb") as f:
+        with lzma.open(input_path / f"walker_{rank}.pkl.xz", "wb") as f:
             pickle.dump(walker, f)
     except Exception as e:
         print(f"Error: Failed to write walker to disk on rank {rank}. Exception: {e}")
