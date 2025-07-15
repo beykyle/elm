@@ -65,7 +65,7 @@ def main():
 
     # Set RNG seed for each walker
     try:
-        walker.rng = np.random.default_rng(rank)
+        walker.update_rng(np.random.default_rng(rank))
     except Exception as e:
         print(
             f"Error: Failed to initialize random number generator on rank {rank}. Exception: {e}"
