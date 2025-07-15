@@ -67,18 +67,18 @@ def elm_so(r, Vso, R0, a0):
 
 def el_model_params(projectile, A, Z, E, sp):
     r"""Calculate the parameters in the ELM for a given target isotope
-    and energy
-l   Parameters:
-        A (int): target mass
-        Z (int): target charge
-        E (int): center-of-mass frame energy
-        sp (tuple) : sub parameters in the form of a tuple in specified order
-    Returns:
-        isoscalar_params (tuple)
-        isovector_params (tuple)
-        spin_orbit_params (tuple)
-        Coulomb_params (tuple)
-        delta =  (N-Z)/(N+Z)
+        and energy
+    l   Parameters:
+            A (int): target mass
+            Z (int): target charge
+            E (int): center-of-mass frame energy
+            sp (tuple) : sub parameters in the form of a tuple in specified order
+        Returns:
+            isoscalar_params (tuple)
+            isovector_params (tuple)
+            spin_orbit_params (tuple)
+            Coulomb_params (tuple)
+            delta =  (N-Z)/(N+Z)
     """
     V0, W0, Wd0, V1, W1, Wd1, Vso, alpha, beta, gamma_w, gamma_d, r0, r1, a0, a1 = sp
     delta = (A - 2 * Z) / (A)

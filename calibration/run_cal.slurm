@@ -44,7 +44,7 @@ mkdir -p $OUTPUT_DIR
 
 # run calibration, with one chain on each available core
 mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
-  --input ./walker.xz \
+  --input ./walker.pkl.xz \
   --steps 100000 \
   --burnin 10000 \
   --output $OUTPUT_DIR

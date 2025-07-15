@@ -26,7 +26,7 @@ def elm_elastic(ws, *x):
         coul_params,
         asym_factor,
     ) = calculate_parameters(
-        tuple(rxn.projectile), tuple(rxn.target), kinematics.Elab, rxn.Ef, *x
+        tuple(rxn.projectile), tuple(rxn.target), kinematics.Ecm, rxn.Ef, *x
     )
     args_central = (
         asym_factor,

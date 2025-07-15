@@ -16,7 +16,7 @@ def central_form(r, V, W, Wd, R, a, Rd, ad):
 
 def spin_orbit_form(r, Vso, Wso, R, a):
     r"""form of spin-orbit term"""
-    return (Vso + 1j * Wso) / WAVENUMBER_PION ** 2 * thomas_safe(r, R, a)
+    return (Vso + 1j * Wso) / WAVENUMBER_PION**2 * thomas_safe(r, R, a)
 
 
 def spin_orbit(
