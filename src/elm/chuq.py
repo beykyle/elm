@@ -8,21 +8,19 @@ the original CH89 paper [Varner, et al., 1991]
 for details. Equation references are with respect to the former paper.
 """
 
+import json
 from collections import OrderedDict
 from pathlib import Path
-import json
 
 import numpy as np
-
-from rxmc.params import Parameter
-
-from jitr.utils.constants import ALPHA, HBARC
 from jitr.optical_potentials.potential_forms import (
+    coulomb_charged_sphere,
     thomas_safe,
     woods_saxon_prime_safe,
     woods_saxon_safe,
-    coulomb_charged_sphere,
 )
+from jitr.utils.constants import ALPHA, HBARC
+from rxmc.params import Parameter
 
 params = [
     Parameter("V0", np.float64, "MeV", "V_0"),
@@ -183,7 +181,7 @@ def calculate_params(
     spin_orbit_isoscalar_params = (Vso, Rso, aso)
     central_isovector_params = (Vt, 0, Wst, R0, a0, Rw, aw)
     spin_orbit_isovector_params = (0, Rso, aso)
-    coulomb_params = (Z, RC)
+    coulomb_params = (Z * Zp, RC)
 
     return (
         central_isoscalar_params,
@@ -257,7 +255,6 @@ class Global:
                 self.params["rc_0"] = data["CH89Coulomb"]["r_c_0"]
 
             elif "CH89RealCentral_V_0" in data:
-
                 self.params["V0"] = data["CH89RealCentral_V_0"]
                 self.params["Ve"] = data["CH89RealCentral_V_e"]
                 self.params["Vt"] = data["CH89RealCentral_V_t"]
