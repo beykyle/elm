@@ -39,7 +39,7 @@ export X43I_DATAPATH="/mnt/home/beyerkyl/x4db/unpack_exfor-2024/X4-2024-12-31"
 python -c 'import elm; print(f"Running model version: {elm.__version__}")'
 
 # output directory
-INPUT_DIR="./elm_cal_og_production"
+INPUT_DIR="./chuq_cal_prod"
 
 # run calibration, with one chain on each available core
 mpirun -np $SLURM_NTASKS python3 ./continue_cal.py \

@@ -47,7 +47,8 @@ mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
   --input ./walker_chuq.pkl.xz \
   --steps 100000 \
   --burnin 10000 \
-  --output $OUTPUT_DIR
+  --output $OUTPUT_DIR \
+  --verbose
 
 # gather and write the results to a single file
 mpirun -np $SLURM_NTASKS python3 ./gather_walkers.py --input $OUTPUT_DIR
