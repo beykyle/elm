@@ -61,16 +61,13 @@ def main():
     except Exception as e:
         print(f"Error: Walker run failed on rank {rank}. Exception: {e}")
         sys.exit(1)
+    print(f"Rank {rank} has acceptance fraction: {acc_frac}")
 
     # Gather acceptance fractions at rank 0
-    try:
-        acc_fracs = comm.gather(acc_frac, root=0)
-    except Exception as e:
-        print(f"Error: MPI gather operation failed on rank {rank}. Exception: {e}")
-        sys.exit(1)
+    acc_fracs = comm.gather(acc_frac, root=0)
 
     # Rank 0 prints acceptance fractions
-    if rank == 0 and acc_fracs is not None:
+    if rank == 0:
         acs = ", ".join([f"{a:1.2f}" for a in acc_fracs])
         print(f"acceptance fractions: {acs}")
 
