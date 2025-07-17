@@ -1,7 +1,7 @@
 #!/bin/bash --login
 
 # Job name:
-#SBATCH --job-name=chuq_cal_prod
+#SBATCH --job-name=chuq_cal_prod_1
 
 # Number of tasks 
 #SBATCH --ntasks=64
@@ -44,7 +44,7 @@ mkdir -p $OUTPUT_DIR
 
 # run calibration, with one chain on each available core
 mpirun -np $SLURM_NTASKS python3 ./run_cal.py \
-  --input ./walker_chuq.pkl.xz \
+  --input ./walker_chuq_prop_cov_scale_factor_0.1.pkl.xz \
   --steps 100000 \
   --burnin 10000 \
   --output $OUTPUT_DIR \
