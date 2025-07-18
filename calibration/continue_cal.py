@@ -38,8 +38,7 @@ def main():
         sys.exit(1)
 
     # Read input file
-    # TODO change name from walkers to walker
-    input_file = input_path / f"walkers_{rank}.pkl.xz"
+    input_file = input_path / f"walker_{rank}.pkl.xz"
     try:
         with lzma.open(input_file, "rb") as f:
             walker = pickle.load(f)
@@ -68,7 +67,7 @@ def main():
 
     # Rank 0 prints acceptance fractions
     if rank == 0:
-        acs = ", ".join([f"{a:1.2f}" for a in acc_fracs])
+        acs = ", ".join([f"{a:1.6f}" for a in acc_fracs])
         print(f"acceptance fractions: {acs}")
 
     # Write walker object to disk from each rank
